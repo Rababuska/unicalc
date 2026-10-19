@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+
+<html lang="ru">
+
+<head>
+
+  <meta charset="UTF-8">
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Единый калькулятор</title>
+
+  <style>
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+
+    body { background: #f1f3f4; color: #202124; min-height: 100vh; }
+
+    header { background: #1a1f2c; color: #fff; padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+
+    h1 { font-size: 21px; }
+
+    .brand-logo { display: block; width: 168px; height: auto; }
+
+    .header-manager-controls { display: flex; align-items: center; gap: 12px; }
+
+    .header-manager-status { color: #e1e6ec; font-size: 13px; white-space: nowrap; }
+
+    .header-manager-controls .secondary-btn { min-height: 36px; }
+
+    .manager-login-fields { display: grid; gap: 12px; margin: 16px 0; }
+
+    .manager-login-fields label { display: grid; gap: 6px; color: #4f5a61; font-size: 13px; }
+
+    .manager-login-fields input, .manager-login-fields select { width: 100%; min-height: 38px; border: 1px solid #bfc5ca; border-radius: 4px; padding: 7px 9px; font: inherit; }
+
+    .manager-login-fields .manager-remember { display: flex; align-items: center; gap: 8px; }
+
+    .manager-login-fields .manager-remember input { width: auto; min-height: 0; }
+
+    .manager-login-error { min-height: 18px; color: #a33; font-size: 12px; }
+
+    .manager-login-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+
+    .tabs, .quote-actions, .history-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+
+    .tab-btn { background: #303949; color: #d8dde5; border: 0; border-radius: 5px; padding: 9px 15px; cursor: pointer; font-size: 14px; }
+
+    .tab-btn.active { background: #146c5a; color: #fff; font-weight: 600; }
+
+    main { max-width: 1500px; margin: 0 auto; padding: 20px 24px 48px; }
+
+    .calc-container, .quote-section { background: #fff; border: 1px solid #d8dcdf; border-radius: 6px; padding: 20px; }
+
+    .calc-heading, .section-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+
+    h2 { font-size: 18px; }
+
+    .legacy-frame { display: block; width: 100%; height: 70vh; min-height: 520px; border: 0; background: #fff; }
+
+    .hidden { display: none !important; }
+
+    .calc-actions { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 14px; padding-top: 14px; border-top: 1px solid #e4e7e9; }
+
+    .calc-status, .history-meta small { color: #687078; font-size: 13px; }
+
+    button { cursor: pointer; }
+
+    button:disabled { cursor: not-allowed; opacity: .55; }
+
+    .primary-btn { border: 0; border-radius: 5px; background: #146c5a; color: #fff; padding: 10px 15px; font-weight: 600; }
+
+    .quote-icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 40px; min-width: 40px; height: 40px; padding: 0; }
+
+    .quote-icon-btn svg { display: block; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+    .quote-total-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 305px; white-space: nowrap; }
+
+    .quote-total-action { width: 32px; min-width: 32px; height: 32px; padding: 0; }
+
+    .quote-total-action svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+    .quote-total-controls .checkbox-inline { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; color: #31383e; font-size: 12px; }
+
+    .quote-total-controls input[type="checkbox"] { width: 15px; height: 15px; margin: 0; accent-color: #146c5a; }
+
+    .quote-total-controls #manual-total-value { width: 78px; min-width: 0; height: 32px; border: 1px solid #bfc5ca; border-radius: 4px; padding: 0 7px; background: #fff; font-size: 13px; }
+
+    .secondary-btn { border: 1px solid #bbc1c6; border-radius: 5px; background: #fff; color: #31383e; padding: 8px 11px; }
+
+    .danger-btn { border: 1px solid #c55; border-radius: 5px; background: #fff; color: #a33; padding: 8px 10px; }
+
+    .quote-section { margin-top: 20px; }
+
+    .quote-toolbar { display: flex; justify-content: space-between; align-items: end; flex-wrap: wrap; gap: 14px; margin-top: 16px; }
+
+    .quote-export-status { min-height: 18px; margin-top: 8px; color: #146c5a; font-size: 13px; }
+
+    .discount-summary { min-height: 20px; margin-top: 7px; color: #146c5a; font-size: 13px; font-weight: 600; }
+
+    .company-field { display: grid; gap: 5px; min-width: min(100%, 300px); color: #555e64; font-size: 12px; }
+
+    .company-field input, .history-search { height: 36px; border: 1px solid #bfc5ca; border-radius: 4px; padding: 0 10px; font-size: 14px; }
+
+    .quote-settings { display: flex; justify-content: space-between; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding: 8px 12px; margin-top: 12px; border: 1px solid #dfe2e4; border-radius: 6px; background: #f7f8f8; }
+
+    .quote-setting-group { display: flex; align-items: center; gap: 9px; min-height: 34px; }
+
+    .discount-setting-group { flex: 1 1 auto; min-width: 0; }
+
+    .quote-setting-heading { color: #4f5a61; font-size: 12px; font-weight: 600; white-space: nowrap; }
+
+    .quote-setting-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+
+    .quote-settings input[type="number"], .quote-settings select { height: 32px; border: 1px solid #bfc5ca; border-radius: 4px; padding: 0 8px; background: #fff; font-size: 13px; }
+
+    #discount-value { width: 82px; }
+
+    #discount-type { width: 82px; }
+
+    #discount-scope { width: 112px; }
+
+    #discount-item { width: 170px; }
+
+    .vat-switch { display: inline-flex; align-items: center; gap: 9px; flex: 0 0 auto; min-height: 34px; color: #31383e; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+
+    .vat-switch input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+
+    .vat-switch-track { position: relative; width: 36px; height: 21px; flex: 0 0 auto; border-radius: 12px; background: #b9c0c5; transition: background-color .15s ease; }
+
+    .vat-switch-track::after { position: absolute; top: 3px; left: 3px; width: 15px; height: 15px; border-radius: 50%; background: #fff; content: ''; transition: transform .15s ease; }
+
+    .vat-switch input:checked + .vat-switch-track { background: #146c5a; }
+
+    .vat-switch input:checked + .vat-switch-track::after { transform: translateX(15px); }
+
+    .vat-switch input:focus-visible + .vat-switch-track { outline: 2px solid #82b7ad; outline-offset: 2px; }
+
+    #manual-total-value { width: 88px; }
+
+    .quote-settings .checkbox-inline { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; color: #31383e; font-size: 12px; white-space: nowrap; }
+
+    .quote-total-controls input[type="checkbox"] { width: 15px; height: 15px; margin: 0; accent-color: #146c5a; }
+
+    .table-wrap { overflow-x: auto; margin-top: 16px; }
+
+    table { width: 100%; min-width: 820px; border-collapse: collapse; font-size: 13px; }
+
+    th, td { border: 1px solid #c7cbce; padding: 8px; text-align: left; vertical-align: top; }
+
+    th { background: #eef0f1; font-weight: 600; }
+
+    .quote-description { white-space: pre-line; color: #4b5257; }
+
+    .quote-quantity-cell { position: relative; vertical-align: top; padding: 8px 38px 38px 8px; }
+
+    .quote-quantity-tools { position: absolute; right: 4px; bottom: 4px; z-index: 4; display: flex; justify-content: flex-end; }
+
+    .quote-quantity-tools .quote-action-icon { width: 28px; min-width: 28px; height: 28px; }
+
+    .quote-quantity-tools .quote-run-form { position: absolute; right: 0; bottom: 33px; width: min(170px, 42vw); padding: 6px; border: 1px solid #c7cbce; border-radius: 4px; background: #fff; box-shadow: 0 3px 10px rgba(20, 27, 32, .14); }
+
+    .quote-quantity-run { display: flex; align-items: center; justify-content: flex-start; gap: 6px; min-height: 28px; }
+
+    .quote-quantity-run + .quote-quantity-run { border-top: 1px solid #e3e5e6; }
+
+    .quote-quantity-run .quote-run-value { flex: 1 1 auto; min-width: 0; min-height: 24px; padding: 2px 0; white-space: nowrap; }
+
+    .quote-quantity-run .quote-action-icon { width: 24px; min-width: 24px; height: 24px; }
+
+    .quote-annotation-line { display: flex; align-items: center; gap: 4px; margin-top: 3px; white-space: normal; }
+
+    .quote-annotation-text { min-width: 0; overflow-wrap: anywhere; }
+
+    .quote-annotation-line .quote-action-icon { width: 25px; min-width: 25px; height: 25px; border-color: transparent; background: transparent; }
+
+    .quote-annotation-line .quote-action-icon:hover { border-color: #bbc1c6; background: #fff; }
+
+    .quote-annotation-line .quote-action-icon svg { width: 15px; height: 15px; }
+
+    .quote-run-value { min-height: 24px; padding: 2px 0; white-space: pre-wrap; }
+
+    .quote-run-value + .quote-run-value { border-top: 1px solid #e3e5e6; }
+
+    .quote-title { display: grid; justify-items: center; gap: 6px; }
+
+    .quote-title-text { font-weight: 600; }
+
+    .quote-add-row td { height: 44px; padding: 4px 8px; vertical-align: middle; }
+
+    .quote-add-position { display: inline-grid; place-items: center; width: 32px; height: 32px; border: 1px solid #146c5a; border-radius: 4px; background: #fff; color: #146c5a; font-size: 22px; line-height: 1; }
+
+    .quote-row-actions { display: grid; gap: 6px; min-width: 142px; }
+
+    .quote-action-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+
+    .quote-action-icon { display: inline-flex; align-items: center; justify-content: center; width: 34px; min-width: 34px; height: 34px; padding: 0; border: 1px solid #bbc1c6; border-radius: 4px; background: #fff; color: #31383e; }
+
+    .quote-action-icon svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+    .quote-action-icon.add-decoration { border-color: #146c5a; color: #146c5a; }
+
+    .quote-action-icon.remove-action { border-color: #e0b2b2; color: #a33; }
+
+    .quote-run-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 6px; border-top: 1px solid #e3e5e6; }
+
+    .quote-run-actions small { color: #687078; }
+
+    .quote-decoration-actions { display: flex; align-items: center; gap: 8px; }
+
+    .quote-decoration-actions .quote-decoration-btn { flex: 1; }
+
+    .decoration-dialog { width: min(1100px, calc(100vw - 32px)); max-width: none; max-height: calc(100vh - 32px); margin: auto; padding: 18px; border: 1px solid #c7cbce; border-radius: 6px; overflow: auto; }
+
+    .product-calculator-dialog { width: min(1280px, calc(100vw - 32px)); max-width: none; max-height: calc(100vh - 32px); margin: auto; padding: 18px; border: 1px solid #c7cbce; border-radius: 6px; overflow: auto; }
+
+    .product-calculator-dialog::backdrop { background: rgba(20, 27, 32, .58); }
+
+    .product-calculator-dialog .calc-container { border: 0; padding: 0; background: transparent; }
+
+    .decoration-dialog::backdrop { background: rgba(20, 27, 32, .58); }
+
+    .decoration-dialog-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 12px; }
+
+    .decoration-dialog-header h2 { font-size: 18px; }
+
+    .decoration-dialog-close { width: 36px; height: 36px; border: 1px solid #bbc1c6; border-radius: 4px; background: #fff; font-size: 22px; line-height: 1; }
+
+    .position-type-dialog { width: min(460px, calc(100vw - 32px)); max-width: none; margin: auto; padding: 18px; border: 1px solid #c7cbce; border-radius: 6px; }
+
+    .position-type-dialog::backdrop { background: rgba(20, 27, 32, .48); }
+
+    .position-type-options { display: grid; gap: 8px; }
+
+    .manual-position-fields { display: grid; gap: 10px; margin: 14px 0; }
+
+    .manual-position-fields label { display: grid; gap: 5px; color: #4f5a61; font-size: 13px; }
+
+    .manual-position-fields input, .manual-position-fields textarea { width: 100%; min-height: 36px; border: 1px solid #bfc5ca; border-radius: 4px; padding: 8px; font: inherit; }
+
+    .manual-position-fields select { width: 100%; min-height: 36px; border: 1px solid #bfc5ca; border-radius: 4px; padding: 8px; font: inherit; }
+
+    .manual-position-numbers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+
+    .product-link-dialog { width: min(560px, calc(100vw - 32px)); max-width: none; margin: auto; padding: 18px; border: 1px solid #c7cbce; border-radius: 6px; }
+
+    .product-link-dialog::backdrop { background: rgba(20, 27, 32, .48); }
+
+    .product-link-field { display: grid; gap: 6px; margin: 16px 0 8px; color: #4f5a61; font-size: 13px; }
+
+    .product-link-field input { width: 100%; height: 40px; border: 1px solid #bfc5ca; border-radius: 4px; padding: 0 10px; font: inherit; }
+
+    .product-link-status { min-height: 20px; color: #a33; font-size: 12px; }
+
+    .position-type-options button { min-height: 44px; text-align: left; }
+
+    #decoration-calculator-slot .legacy-frame { height: min(68vh, 700px); min-height: 120px; }
+
+    #decoration-calculator-slot .calc-heading { display: none; }
+
+    #decoration-dialog.decoration-dialog-full #decoration-calculator-slot .calc-heading { display: flex; }
+
+    #decoration-dialog.decoration-dialog-full #decoration-calculator-slot .legacy-frame { height: min(66vh, 720px); min-height: 420px; }
+
+    #decoration-actions-slot .calc-actions { margin-top: 10px; }
+
+    .quote-run-form { display: grid; grid-template-columns: minmax(70px, 1fr) auto; gap: 5px; }
+
+    .quote-run-form input { width: 100%; min-width: 0; height: 34px; border: 1px solid #bbc1c6; border-radius: 4px; padding: 0 7px; }
+
+    .quote-decoration-btn { border: 1px solid #146c5a; border-radius: 4px; background: #fff; color: #146c5a; padding: 5px 7px; font-size: 12px; }
+
+    .quote-editable:focus { outline: 2px solid #82b7ad; outline-offset: 1px; }
+
+    .quote-photo { max-width: 90px; max-height: 90px; object-fit: contain; border: 1px solid #c7cbce; padding: 2px; background: #fff; }
+
+    .remove-photo { border: 0; background: transparent; color: #a33; font-size: 12px; }
+
+    .quote-total { font-weight: 700; text-align: right; }
+
+    .expense-summary { display: grid; grid-template-columns: repeat(4, minmax(130px, 1fr)); gap: 12px; margin-top: 14px; padding: 14px; border: 1px solid #d8dcdf; background: #f7f8f8; }
+
+    .expense-summary div { display: grid; gap: 5px; }
+
+    .expense-summary span { color: #687078; font-size: 12px; }
+
+    .expense-summary strong { font-size: 15px; }
+
+    .empty-row { color: #72797e; text-align: center; padding: 24px; }
+
+    .remove-row { border: 0; background: transparent; color: #a33; font-size: 18px; line-height: 1; }
+
+    .history { margin-top: 28px; border-top: 1px solid #dfe2e4; padding-top: 18px; }
+
+    .history-list { display: grid; gap: 8px; margin-top: 12px; }
+
+    .history-entry { display: flex; justify-content: space-between; align-items: center; gap: 16px; border-bottom: 1px solid #e4e7e9; padding: 10px 0; }
+
+    .history-meta { display: grid; gap: 4px; }
+
+    .history-meta small { font-size: 12px; }
+
+    .history-search { width: min(100%, 360px); margin-top: 12px; }
+
+    @media (max-width: 700px) {
+
+      header { align-items: flex-start; flex-direction: column; padding: 14px 16px; }
+
+      .header-manager-controls { width: 100%; justify-content: space-between; }
+
+      .header-manager-status { white-space: normal; }
+
+      .tabs { width: 100%; }
+
+      .tab-btn { flex: 1; padding: 9px 7px; }
+
+      main { padding: 12px; }
+
+      .calc-container, .quote-section { padding: 14px; }
+
+      .legacy-frame { height: 68vh; min-height: 460px; }
+
+      .decoration-dialog, .product-calculator-dialog { padding: 12px; }
+
+      #decoration-calculator-slot .legacy-frame { height: 60vh; min-height: 120px; }
+
+      .calc-actions, .section-heading { align-items: flex-start; flex-direction: column; }
+
+      .quote-settings { align-items: flex-start; }
+
+      .discount-setting-group { flex: 1 1 100%; flex-wrap: wrap; }
+
+      .quote-setting-controls { flex: 1 1 100%; }
+
+      #discount-item { flex: 1 1 130px; }
+
+      .vat-switch { align-self: flex-start; }
+
+      .calc-actions .primary-btn { width: 100%; }
+
+      .expense-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+      .history-entry { align-items: flex-start; flex-direction: column; }
+
+    }
+
+  </style>
+
+</head>
+
+<body>
+
+  <header>
+
+    <img class="brand-logo" src="https://vto.kz/wp-content/uploads/2013/03/251.png" alt="VTO" width="168" height="20">
+
+    <div class="header-manager-controls">
+      <span class="header-manager-status" id="manager-auth-status" role="status">Вход не выполнен</span>
+      <button class="secondary-btn" id="btn-manager-login" type="button">Войти</button>
+    </div>
+
+  </header>
+
+
+
+  <main>
+
+    <section class="calc-container hidden" aria-label="Текущий расчет">
+
+      <div id="module-poly"><div class="calc-heading"><h2>Полиграфический расчет</h2></div><div id="legacy-poly-slot"></div></div>
+
+      <div id="module-souvenir" class="hidden"><div class="calc-heading"><h2>Расчет сувенирной продукции</h2></div><div id="legacy-souvenir-slot"></div></div>
+
+      <div class="calc-actions"><span class="calc-status" id="calc-status" aria-live="polite">Загружается калькулятор</span><div class="calc-action-buttons"><button class="secondary-btn hidden" id="btn-cancel-decoration" type="button">Отменить нанесение</button><button class="primary-btn" id="btn-add-to-kp" type="button" disabled>+ Добавить в КП</button></div></div>
+
+    </section>
+
+
+
+    <section class="quote-section" aria-labelledby="quote-title">
+
+      <div class="section-heading"><h2 id="quote-title">Таблица коммерческого предложения</h2><span>Позиций: <span id="quote-count">0</span></span></div>
+
+      <div class="quote-toolbar">
+
+        <label class="company-field">Клиент / компания<input id="company-name" type="text" autocomplete="organization" placeholder="Название компании"></label>
+
+        <div class="quote-actions">
+
+          <button class="primary-btn quote-icon-btn" id="btn-new-quote" type="button" aria-label="Новое КП" title="Новое КП"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M12 18h6"/><path d="M15 15v6"/></svg></button>
+
+          <button class="secondary-btn quote-icon-btn" id="btn-open-history" type="button" aria-label="История КП" title="История КП" aria-controls="history-section"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></button>
+
+          <button class="secondary-btn quote-icon-btn" id="btn-save-history" type="button" aria-label="Сохранить в историю" title="Сохранить в историю" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg></button>
+
+          <button class="danger-btn quote-icon-btn" id="btn-clear-kp" type="button" aria-label="Очистить всё" title="Очистить всё" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg></button>
+
+          <button class="secondary-btn quote-icon-btn" id="btn-download-pdf" type="button" aria-label="Скачать PDF" title="Скачать PDF" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg></button>
+
+          <button class="secondary-btn quote-icon-btn" id="btn-copy-word" type="button" aria-label="Скопировать в Word" title="Скопировать в Word" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg></button>
+
+        </div>
+
+      </div>
+
+      <div class="quote-settings" aria-label="Настройки скидки и НДС">
+
+        <div class="quote-setting-group discount-setting-group">
+          <span class="quote-setting-heading">Скидка</span>
+          <div class="quote-setting-controls">
+            <input id="discount-value" type="number" min="0" step="0.01" value="0" aria-label="Размер скидки">
+            <select id="discount-type" aria-label="Тип скидки"><option value="percent">%</option><option value="amount">теңге</option></select>
+            <select id="discount-scope" aria-label="Применить скидку к"><option value="order">всё КП</option><option value="position">позицию</option></select>
+            <select id="discount-item" aria-label="Позиция для скидки" disabled><option value="">Выберите позицию</option></select>
+          </div>
+        </div>
+
+        <label class="vat-switch" for="vat-toggle">
+          <input id="vat-toggle" type="checkbox" checked>
+          <span class="vat-switch-track" aria-hidden="true"></span>
+          <span>НДС 16%</span>
+        </label>
+
+      </div>
+
+      <p class="discount-summary" id="discount-summary" aria-live="polite"></p>
+
+      <p class="quote-export-status" id="quote-export-status" aria-live="polite"></p>
+
+      <div class="table-wrap">
+
+        <table class="kp-table">
+
+          <thead><tr><th id="kp-document-heading" colspan="8"></th></tr><tr><th>№</th><th>Наименование</th><th>Данные</th><th>Кол-во / шт</th><th>Стоимость за единицу / теңге</th><th>Итого / теңге</th><th>Срок / раб. дни</th><th>Действия</th></tr></thead>
+
+          <tbody id="kp-items"></tbody>
+
+          <tfoot><tr><td colspan="5" class="quote-total" id="kp-total-label">Итого по КП (с НДС 16%):</td><td class="quote-total" id="kp-total">0</td><td colspan="2"><div class="quote-total-controls"><label class="checkbox-inline"><input id="manual-total-enabled" type="checkbox"> Ручной</label><input id="manual-total-value" type="number" min="0" step="0.01" placeholder="теңге" aria-label="Ручной итог КП" disabled><label class="checkbox-inline"><input id="hide-total-toggle" type="checkbox"> Скрыть</label><button class="secondary-btn quote-icon-btn quote-total-action" id="btn-global-overtime" type="button" aria-label="Сверхурочные по всему КП" title="Сверхурочные по всему КП"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></button><button class="secondary-btn quote-icon-btn quote-total-action" id="btn-global-cashback" type="button" aria-label="Кэшбек по всему КП" title="Кэшбек по всему КП"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></button></div></td></tr></tfoot>
+
+        </table>
+
+      </div>
+
+      <div class="expense-summary" aria-label="Расходы по КП">
+
+        <div><span>Расходы · Полиграфия</span><strong id="cost-poly">0 теңге</strong></div>
+
+        <div><span>Расходы · Сувенирка</span><strong id="cost-souvenir">0 теңге</strong></div>
+
+        <div><span>Расходы · Прочее</span><strong id="cost-other">0 теңге</strong></div>
+
+        <div><span>Расходы · Сверхурочные</span><strong id="cost-overtime">0 теңге</strong></div>
+
+        <div><span>Расходы · Кэшбек</span><strong id="cost-cashback">0 теңге</strong></div>
+
+        <div><span>Всего расходов по КП</span><strong id="cost-total">0 теңге</strong></div>
+
+      </div>
+
+      <section class="history" id="history-section" aria-labelledby="history-title">
+
+        <div class="section-heading"><h2 id="history-title">История КП</h2><div class="history-actions"><button class="secondary-btn" id="btn-back-to-quote" type="button">К таблице КП</button><button class="secondary-btn" id="btn-sync-history" type="button" disabled>Обновить</button></div></div>
+
+        <input class="history-search" id="history-search" type="search" placeholder="Поиск по клиенту, дате или составу">
+
+        <div class="history-list" id="history-list"></div>
+
+      </section>
+
+    </section>
+
+  </main>
+
+  <dialog id="decoration-dialog" class="decoration-dialog" aria-labelledby="decoration-dialog-title">
+    <div class="decoration-dialog-header">
+      <h2 id="decoration-dialog-title">Добавление нанесения</h2>
+      <button class="decoration-dialog-close" id="btn-close-decoration-dialog" type="button" aria-label="Закрыть окно">×</button>
+    </div>
+    <div id="decoration-calculator-slot"></div>
+    <div id="decoration-actions-slot"></div>
+  </dialog>
+
+  <dialog id="position-type-dialog" class="position-type-dialog" aria-labelledby="position-type-title">
+    <div class="decoration-dialog-header">
+      <h2 id="position-type-title">Добавить позицию</h2>
+      <button class="decoration-dialog-close" id="btn-close-position-type" type="button" aria-label="Закрыть окно">×</button>
+    </div>
+    <div class="position-type-options">
+      <button class="secondary-btn" id="btn-create-poly-position" type="button">Полиграфия</button>
+      <button class="secondary-btn" id="btn-select-custom-position" type="button">Своя позиция</button>
+      <button class="secondary-btn" id="btn-create-souvenir-position" type="button">Сувенирная продукция</button>
+    </div>
+  </dialog>
+
+  <dialog id="souvenir-link-dialog" class="product-link-dialog" aria-labelledby="souvenir-link-title">
+    <div class="decoration-dialog-header">
+      <h2 id="souvenir-link-title">Сувенирная продукция</h2>
+      <button class="decoration-dialog-close" id="btn-close-souvenir-link" type="button" aria-label="Закрыть окно">×</button>
+    </div>
+    <label class="product-link-field">Ссылка на товар<input id="souvenir-product-url" type="url" inputmode="url" autocomplete="url" placeholder="Вставьте ссылку из каталога"></label>
+    <p class="product-link-status" id="souvenir-link-status" aria-live="polite"></p>
+    <div class="position-type-options">
+      <button class="primary-btn" id="btn-import-souvenir-link" type="button" disabled>Продолжить</button>
+      <button class="secondary-btn" id="btn-manual-souvenir" type="button">Ручной ввод</button>
+    </div>
+  </dialog>
+
+  <dialog id="manual-position-dialog" class="position-type-dialog" aria-labelledby="manual-position-title">
+    <div class="decoration-dialog-header">
+      <h2 id="manual-position-title">Своя позиция</h2>
+      <button class="decoration-dialog-close" id="btn-close-manual-position" type="button" aria-label="Закрыть окно">×</button>
+    </div>
+    <div class="manual-position-fields">
+      <label>Наименование<input id="manual-position-title-input" type="text" value="Новая позиция" required></label>
+      <label>Технические данные<textarea id="manual-position-details" rows="3"></textarea></label>
+      <div class="manual-position-numbers">
+        <label>Тираж<input id="manual-position-quantity" type="number" min="1" step="1" value="1" required></label>
+        <label>Цена за единицу, теңге<input id="manual-position-unit-price" type="number" min="0" step="0.01" value="0"></label>
+      </div>
+      <div class="manual-position-numbers">
+        <label>Себестоимость, теңге<input id="manual-position-cost" type="number" min="0" step="0.01" value="0"></label>
+        <label>Срок, раб. дни<input id="manual-position-delivery" type="text" placeholder="Например, 3-5"></label>
+      </div>
+    </div>
+    <div class="position-type-options">
+      <button class="primary-btn" id="btn-create-manual-position" type="button">Добавить в КП</button>
+      <button class="secondary-btn" id="btn-cancel-manual-position" type="button">Отмена</button>
+    </div>
+  </dialog>
+
+  <dialog id="product-calculator-dialog" class="product-calculator-dialog" aria-labelledby="product-calculator-title">
+    <div class="decoration-dialog-header">
+      <h2 id="product-calculator-title">Расчёт позиции</h2>
+      <button class="decoration-dialog-close" id="btn-close-product-calculator" type="button" aria-label="Закрыть окно">×</button>
+    </div>
+    <div id="product-calculator-slot"></div>
+  </dialog>
+
+  <dialog id="new-quote-dialog" class="position-type-dialog" aria-labelledby="new-quote-title">
+    <div class="decoration-dialog-header">
+      <h2 id="new-quote-title">Новое КП</h2>
+      <button class="decoration-dialog-close" id="btn-close-new-quote" type="button" aria-label="Закрыть окно">×</button>
+    </div>
+    <p class="calc-status">Сохранить текущее КП перед созданием нового?</p>
+    <div class="position-type-options">
+      <button class="primary-btn" id="btn-save-and-new-quote" type="button">Сохранить и создать</button>
+      <button class="secondary-btn" id="btn-discard-and-new-quote" type="button">Создать без сохранения</button>
+      <button class="secondary-btn" id="btn-cancel-new-quote" type="button">Отмена</button>
+    </div>
+  </dialog>
+
+  <dialog id="overtime-dialog" class="position-type-dialog" aria-labelledby="overtime-title">
+    <div class="decoration-dialog-header">
+      <h2 id="overtime-title">Сверхурочные</h2>
+      <button class="decoration-dialog-close" id="btn-close-overtime" type="button" aria-label="Закрыть окно">×</button>
+    </div>
+    <div class="manual-position-fields">
+      <div id="overtime-target-label" class="calc-status"></div>
+      <div class="manual-position-numbers">
+        <label>Печатники, часы<input id="overtime-printer-hours" type="number" min="0" step="0.5" value="0"></label>
+        <label>Переплёт, часы<input id="overtime-binding-hours" type="number" min="0" step="0.5" value="0"></label>
+      </div>
+      <label>Как отразить сверхурочные
+        <select id="overtime-display-mode"><option value="spread">Распределить по цене товара</option><option value="line">Добавить отдельной строкой КП</option></select>
+      </label>
+    </div>
+    <p class="discount-summary" id="overtime-preview" aria-live="polite"></p>
+    <div class="position-type-options">
+      <button class="primary-btn" id="btn-add-overtime" type="button" disabled>Добавить</button>
+      <button class="danger-btn hidden" id="btn-remove-overtime" type="button">Удалить</button>
+      <button class="secondary-btn" id="btn-cancel-overtime" type="button">Отмена</button>
+    </div>
+  </dialog>
+
+  <dialog id="cashback-dialog" class="position-type-dialog" aria-labelledby="cashback-title">
+    <div class="decoration-dialog-header">
+      <h2 id="cashback-title">Кэшбек</h2>
+      <button class="decoration-dialog-close" id="btn-close-cashback" type="button" aria-label="Закрыть окно">×</button>
+    </div>
+    <div class="manual-position-fields">
+      <div id="cashback-target-label" class="calc-status"></div>
+      <label>Сумма указана как
+        <select id="cashback-mode"><option value="invoice">Добавить к счёту</option><option value="net">Получить на руки</option></select>
+      </label>
+      <label id="cashback-amount-label">Сумма, теңге<input id="cashback-amount" type="number" min="0" step="0.01" value=""></label>
+    </div>
+    <p class="discount-summary" id="cashback-preview" aria-live="polite"></p>
+    <div class="position-type-options">
+      <button class="primary-btn" id="btn-add-cashback" type="button" disabled>Добавить</button>
+      <button class="danger-btn hidden" id="btn-remove-cashback" type="button">Удалить</button>
+      <button class="secondary-btn" id="btn-cancel-cashback" type="button">Отмена</button>
+    </div>
+  </dialog>
+
+  <dialog id="manager-login-dialog" class="position-type-dialog" aria-labelledby="manager-login-title">
+    <div class="decoration-dialog-header">
+      <h2 id="manager-login-title">Вход менеджера</h2>
+      <button class="decoration-dialog-close" id="btn-close-manager-login" type="button" aria-label="Закрыть окно">×</button>
+    </div>
+    <div class="manager-login-fields">
+      <label>Менеджер<select id="manager-login-select" autocomplete="off"></select></label>
+      <label>ПИН-код<input id="manager-login-pin" type="password" inputmode="numeric" autocomplete="current-password" placeholder="Введите ПИН-код"></label>
+      <label class="manager-remember"><input id="manager-login-remember" type="checkbox"> Запомнить меня на этом устройстве</label>
+      <p class="manager-login-error" id="manager-login-error" aria-live="polite"></p>
+    </div>
+    <div class="manager-login-actions">
+      <button class="danger-btn hidden" id="btn-manager-logout" type="button">Выйти</button>
+      <button class="secondary-btn" id="btn-cancel-manager-login" type="button">Отмена</button>
+      <button class="primary-btn" id="btn-submit-manager-login" type="button">Войти</button>
+    </div>
+  </dialog>
+
+
+
+  <script src="js/core/state.js"></script>
+
+  <script src="js/core/finance.js"></script>
+
+  <script src="js/core/history.js"></script>
+
+  <script src="js/core/kp.js"></script>
+
+  <script src="js/core/legacy-bridge.js"></script>
+
+  <script src="js/app.js"></script>
+
+</body>
+
+</html> 
