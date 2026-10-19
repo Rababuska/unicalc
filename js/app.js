@@ -611,47 +611,50 @@
     return '';
   }
 
-  async function fetchSouvenirResource(url, errorMessage) {
-    let directFailure = null;
+async function fetchSouvenirResource(url, errorMessage) {
+    // 1. Прямой запрос из браузера (если сайт поставщика разрешает CORS)
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const response = await fetch(url, { credentials: 'omit' });
         if (response.ok) return response;
-        directFailure = new Error('HTTP ' + response.status);
       } catch (error) {
-        directFailure = error;
+        // Ошибку CORS пропускаем и уходим на веб-шлюзы
       }
-      if (attempt === 0) await new Promise(function (resolve) { window.setTimeout(resolve, 300); });
+      if (attempt === 0) await new Promise(function (resolve) { window.setTimeout(resolve, 200); });
     }
 
-    try {
-      const proxyUrl = 'http://127.0.0.1:8767/proxy?url=' + encodeURIComponent(url);
-      const response = await fetch(proxyUrl, { credentials: 'omit' });
-      if (response.ok) return response;
-      let proxyMessage = '';
+    // 2. Список веб-шлюзов с автопереключением и локальным мостом
+    const endpoints = [
+      'https://corsproxy.io/?url=' + encodeURIComponent(url),
+      'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
+      'http://127.0.0.1:8767/proxy?url=' + encodeURIComponent(url)
+    ];
+
+    for (let i = 0; i < endpoints.length; i++) {
       try {
-        const body = await response.json();
-        proxyMessage = body.error || '';
-      } catch (error) {
-        proxyMessage = '';
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const timer = controller ? setTimeout(function () { controller.abort(); }, 8000) : null;
+        const response = await fetch(endpoints[i], {
+          credentials: 'omit',
+          signal: controller ? controller.signal : undefined
+        });
+        if (timer) clearTimeout(timer);
+        if (response.ok) return response;
+      } catch (proxyError) {
+        // Переходим к следующему шлюзу в списке
       }
-      throw new Error(proxyMessage || 'Локальный мост вернул HTTP ' + response.status);
-    } catch (proxyError) {
-      if (proxyError && proxyError.message && proxyError.message.includes('Локальный мост')) {
-        throw new Error(errorMessage + ' ' + proxyError.message + '. Запустите souvenir-import-proxy.ps1.');
-      }
-      throw new Error(errorMessage + ' Локальный мост импорта не запущен; выполните souvenir-import-proxy.ps1.');
     }
+
+    throw new Error(errorMessage || 'Не удалось загрузить данные по ссылке. Проверьте адрес или используйте ручной ввод.');
   }
 
   async function importSouvenirProductFromUrl(rawUrl) {
     const pageUrl = normalizeSouvenirProductUrl(rawUrl);
     if (!pageUrl) throw new Error('Вставьте HTTPS-ссылку из поддерживаемого каталога');
-    const pageResponse = await fetchSouvenirResource(pageUrl, 'Не удалось получить страницу товара из браузера (ограничение CORS или сети). Проверьте полный адрес или выберите ручной ввод.');
+    const pageResponse = await fetchSouvenirResource(pageUrl, 'Не удалось получить страницу товара из браузера. Проверьте ссылку или выберите ручной ввод.');
     if (!pageResponse.ok) throw new Error('Каталог не ответил: ' + pageResponse.status);
     const responseUrl = new URL(pageResponse.url || pageUrl);
-    const isLocalProxyResponse = responseUrl.hostname === '127.0.0.1' && responseUrl.port === '8767';
-    const finalUrl = normalizeSouvenirProductUrl(isLocalProxyResponse ? pageUrl : responseUrl.href);
+    const finalUrl = normalizeSouvenirProductUrl(responseUrl.href) || pageUrl;
     if (!finalUrl) throw new Error('Ссылка перенаправила на неподдерживаемый сайт');
     const html = await pageResponse.text();
     const doc = new DOMParser().parseFromString(html, 'text/html');
