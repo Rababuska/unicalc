@@ -651,15 +651,32 @@ function getSouvenirProductImageUrl(doc, pageUrl, productName, productSchema) {
   }
 
 async function fetchSouvenirResource(url, errorMessage) {
-    const proxyUrl = 'https://gifts-proxy.subilmur.workers.dev/?url=' + encodeURIComponent(url);
+    const encoded = encodeURIComponent(url);
+    // Список шлюзов: ваш воркер + два публичных резервных (на случай блокировки от Оазиса)
+    const endpoints = [
+      'https://gifts-proxy.subilmur.workers.dev/?url=' + encoded,
+      'https://api.codetabs.com/v1/proxy?quest=' + encoded,
+      'https://api.allorigins.win/raw?url=' + encoded
+    ];
 
-    try {
-      const response = await fetch(proxyUrl);
-      if (response.ok) return response;
-      throw new Error('HTTP ' + response.status);
-    } catch (error) {
-      throw new Error(errorMessage || 'Не удалось загрузить данные по ссылке. Проверьте адрес или используйте ручной ввод.');
+    for (let i = 0; i < endpoints.length; i++) {
+      try {
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        // Жесткий таймаут 7 секунд, чтобы калькулятор не висел бесконечно
+        const timer = controller ? setTimeout(function() { controller.abort(); }, 7000) : null;
+        
+        const response = await fetch(endpoints[i], { 
+          credentials: 'omit', 
+          signal: controller ? controller.signal : undefined 
+        });
+        
+        if (timer) clearTimeout(timer);
+        if (response.ok) return response;
+      } catch (error) {
+        // Игнорируем зависание текущего шлюза и сразу пробуем следующий
+      }
     }
+    throw new Error(errorMessage || 'Сайт поставщика заблокировал автоматический запрос (сработала защита). Воспользуйтесь ручным вводом.');
   }
 
   async function importSouvenirProductFromUrl(rawUrl) {
@@ -686,9 +703,21 @@ async function fetchSouvenirResource(url, errorMessage) {
     const socialTitle = String(doc.querySelector('meta[property="og:title"]')?.content || doc.title || '').replace(/\s+/g, ' ').trim();
     const title = String(productSchema && productSchema.name || heading || socialTitle).replace(/\s+/g, ' ').trim();
     const fullTitle = String(heading || productSchema && productSchema.name || socialTitle || title).replace(/\s+/g, ' ').trim();
-    if (!title) throw new Error('Не удалось найти название товара на странице');
-    const imageUrl = getSouvenirProductImageUrl(doc, finalUrl, title, productSchema);
-    if (!imageUrl) throw new Error('На странице не нашлась главная фотография товара');
+if (!title) throw new Error('Не удалось найти название товара на странице');
+    
+    let imageUrl = getSouvenirProductImageUrl(doc, finalUrl, title, productSchema);
+    
+    // Жесткий fallback для Happy Gifts: ищем ссылку на фото прямо в сыром тексте HTML
+    if (!imageUrl && html) {
+      const rawMatch = html.match(/["']([^"']+\/upload\/(?:iblock|resize_cache)[^"']+\.(?:jpg|jpeg|png|webp))["']/i);
+      if (rawMatch) {
+        let path = rawMatch[1];
+        if (path.startsWith('//')) path = 'https:' + path;
+        try { imageUrl = new URL(path, finalUrl).href; } catch(e) {}
+      }
+    }
+    
+    if (!imageUrl) throw new Error('На странице не нашлась главная фотография товара (вероятно, нестандартная галерея)');
     const imageResponse = await fetchSouvenirResource(imageUrl, 'Карточка товара открылась, но сайт не разрешил загрузить фото. Попробуйте другую ссылку или ручной ввод.');
     if (!imageResponse.ok) throw new Error('Не удалось загрузить фотографию товара');
     const imageBlob = await imageResponse.blob();
