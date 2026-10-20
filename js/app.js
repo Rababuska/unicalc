@@ -581,29 +581,68 @@
     return typeof value === 'string' ? value : '';
   }
 
-  function getSouvenirProductImageUrl(doc, pageUrl, productName, productSchema) {
+function getSouvenirProductImageUrl(doc, pageUrl, productName, productSchema) {
     const structuredImage = productImageValue(productSchema && productSchema.image);
     const metaImage = doc.querySelector('meta[property="og:image"]')?.content
       || doc.querySelector('meta[name="twitter:image"]')?.content
+      || doc.querySelector('link[rel="image_src"]')?.getAttribute('href')
+      || doc.querySelector('[itemprop="image"]')?.getAttribute('content')
+      || doc.querySelector('[itemprop="image"]')?.getAttribute('src')
       || '';
+
     const normalizedName = String(productName || '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+    // Селекторы галерей и слайдеров Happy Gifts, Oasis, Arte, Gifts
+    const gallerySelectors = [
+      '.detail-gallery img', '.product-gallery img', '.product-slider img',
+      '.catalog-element-gallery img', '.slider-for img', '.swiper-slide img',
+      '.product-photo img', '.product-images img', '.gallery img',
+      'a[data-fancybox] img', 'a.fancybox img', '.product-detail-slider img'
+    ];
+    const galleryImages = Array.from(doc.querySelectorAll(gallerySelectors.join(', '))).map(function (image) {
+      return image.getAttribute('data-src') || image.getAttribute('data-original') || image.getAttribute('data-lazy') || image.getAttribute('data-zoom-image') || image.getAttribute('src') || '';
+    }).filter(Boolean);
+
+    // Поиск по названию в атрибуте alt
     const matchingImages = Array.from(doc.images).filter(function (image) {
       const alt = String(image.alt || '').replace(/\s+/g, ' ').trim().toLowerCase();
       return alt && (alt === normalizedName || normalizedName.includes(alt) || alt.includes(normalizedName));
     }).map(function (image) {
-      return image.getAttribute('data-src') || image.getAttribute('data-original') || image.getAttribute('srcset')?.split(',')[0].trim().split(/\s+/)[0] || image.getAttribute('src') || '';
-    });
-    const articleCode = pageUrl.match(/articul[_-](\d+)/i)?.[1];
+      return image.getAttribute('data-src') || image.getAttribute('data-original') || image.getAttribute('data-lazy') || image.getAttribute('src') || '';
+    }).filter(Boolean);
+
+    // Поиск по коду/артикулу в имени файла
+    const articleMatch = pageUrl.match(/(?:articul|item|id)[_-]?([0-9a-zA-Z_-]+)/i);
+    const articleCode = articleMatch ? articleMatch[1] : '';
     const articleImages = articleCode ? Array.from(doc.images).map(function (image) {
-      return image.getAttribute('data-src') || image.getAttribute('data-original') || image.getAttribute('srcset')?.split(',')[0].trim().split(/\s+/)[0] || image.getAttribute('src') || '';
+      return image.getAttribute('data-src') || image.getAttribute('data-original') || image.getAttribute('src') || '';
     }).filter(function (source) { return source && source.includes(articleCode); }) : [];
-    const candidates = [structuredImage, metaImage].concat(matchingImages, articleImages);
+
+    // Резервный поиск: первое подходящее фото товара из каталожной папки
+    const fallbackImages = Array.from(doc.images).map(function (image) {
+      return image.getAttribute('data-src') || image.getAttribute('data-original') || image.getAttribute('src') || '';
+    }).filter(function (src) {
+      if (!src || src.startsWith('data:') || /\.svg(?:$|\?)/i.test(src)) return false;
+      return /(?:upload|catalog|products|iblock|images\/products)/i.test(src)
+        && !/(?:logo|icon|banner|payment|footer|avatar|badge)/i.test(src);
+    });
+
+    const candidates = [structuredImage, metaImage].concat(galleryImages, matchingImages, articleImages, fallbackImages);
+
     for (let index = 0; index < candidates.length; index++) {
-      const candidate = String(candidates[index] || '').trim();
+      let candidate = String(candidates[index] || '').trim();
       if (!candidate || candidate.startsWith('data:image/gif')) continue;
+
+      // Нормализация протокола (исправление ошибки Happy Gifts с http://)
+      if (candidate.startsWith('//')) candidate = 'https:' + candidate;
+      if (candidate.startsWith('http://')) candidate = candidate.replace('http://', 'https://');
+
       try {
         const imageUrl = new URL(candidate, pageUrl);
-        if (imageUrl.protocol === 'https:' && !/\.svg(?:$|\?)/i.test(imageUrl.pathname)) return imageUrl.href;
+        if (imageUrl.protocol === 'http:') imageUrl.protocol = 'https:';
+        if (imageUrl.protocol === 'https:' && !/\.svg(?:$|\?)/i.test(imageUrl.pathname)) {
+          return imageUrl.href;
+        }
       } catch (error) {
         continue;
       }
