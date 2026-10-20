@@ -651,32 +651,20 @@ function getSouvenirProductImageUrl(doc, pageUrl, productName, productSchema) {
   }
 
 async function fetchSouvenirResource(url, errorMessage) {
-    const encoded = encodeURIComponent(url);
-    // Список шлюзов: ваш воркер + два публичных резервных (на случай блокировки от Оазиса)
-    const endpoints = [
-      'https://gifts-proxy.subilmur.workers.dev/?url=' + encoded,
-      'https://api.codetabs.com/v1/proxy?quest=' + encoded,
-      'https://api.allorigins.win/raw?url=' + encoded
-    ];
+    // Вставьте сюда адрес вашего воркера:
+    const PROXY_URL = 'https://gifts-proxy.subilmur.workers.dev/?url=';
 
-    for (let i = 0; i < endpoints.length; i++) {
-      try {
-        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-        // Жесткий таймаут 7 секунд, чтобы калькулятор не висел бесконечно
-        const timer = controller ? setTimeout(function() { controller.abort(); }, 7000) : null;
-        
-        const response = await fetch(endpoints[i], { 
-          credentials: 'omit', 
-          signal: controller ? controller.signal : undefined 
-        });
-        
-        if (timer) clearTimeout(timer);
-        if (response.ok) return response;
-      } catch (error) {
-        // Игнорируем зависание текущего шлюза и сразу пробуем следующий
+    try {
+      const response = await fetch(PROXY_URL + encodeURIComponent(url));
+      
+      if (!response.ok) {
+        throw new Error(`HTTP Error: ${response.status}`);
       }
+      
+      return response;
+    } catch (error) {
+      throw new Error(errorMessage || 'Каталог не ответил (сработала защита от ботов). Проверьте ссылку или выберите ручной ввод.');
     }
-    throw new Error(errorMessage || 'Сайт поставщика заблокировал автоматический запрос (сработала защита). Воспользуйтесь ручным вводом.');
   }
 
   async function importSouvenirProductFromUrl(rawUrl) {
