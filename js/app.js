@@ -698,31 +698,32 @@ function getSouvenirProductImageUrl(doc, pageUrl, productName, productSchema) {
       }
       return Boolean(productSchema);
     });
-    const heading = String(doc.querySelector('h1')?.textContent || '').replace(/\s+/g, ' ').trim();
+const heading = String(doc.querySelector('h1')?.textContent || '').replace(/\s+/g, ' ').trim();
     const socialTitle = String(doc.querySelector('meta[property="og:title"]')?.content || doc.title || '').replace(/\s+/g, ' ').trim();
     const title = String(productSchema && productSchema.name || heading || socialTitle).replace(/\s+/g, ' ').trim();
     const fullTitle = String(heading || productSchema && productSchema.name || socialTitle || title).replace(/\s+/g, ' ').trim();
-if (!title) throw new Error('Не удалось найти название товара на странице');
+    if (!title) throw new Error('Не удалось найти название товара на странице');
+
     let imageUrl = '';
 
-    // Жесткий прямой захват фото для Happy Gifts из тега <link itemprop="image">
+    // Прямой захват тега <link itemprop="image"> и папки /catalog-images/ из сырого HTML Happy Gifts
     if (finalUrl.includes('happygifts.ru')) {
-      const happyLinkMatch = html.match(/<link[^>]+itemprop=["']image["'][^>]+href=["']([^"']+)["']/i)
+      const rawHappyMatch = html.match(/<link[^>]+itemprop=["']image["'][^>]+href=["']([^"']+)["']/i)
         || html.match(/<link[^>]+href=["']([^"']+)["'][^>]+itemprop=["']image["']/i)
         || html.match(/["']((?:https?:\/\/[^"'\s<>]+)?\/catalog-images\/[^"'\s<>]+\.(?:jpe?g|png|webp))["']/i);
 
-      if (happyLinkMatch && happyLinkMatch[1]) {
-        let rawHref = happyLinkMatch[1].trim();
-        if (rawHref.startsWith('//')) rawHref = 'https:' + rawHref;
+      if (rawHappyMatch && rawHappyMatch[1]) {
+        let matchedPath = rawHappyMatch[1].trim();
+        if (matchedPath.startsWith('//')) matchedPath = 'https:' + matchedPath;
         try {
-          imageUrl = new URL(rawHref, finalUrl).href;
-        } catch (error) {
-          imageUrl = rawHref;
+          imageUrl = new URL(matchedPath, finalUrl).href;
+        } catch (e) {
+          imageUrl = matchedPath;
         }
       }
     }
 
-    // Для остальных каталогов или если тег не найден
+    // Стандартный парсинг для остальных каталогов (Gifts, Oasis, Arte, Portobello)
     if (!imageUrl) {
       imageUrl = getSouvenirProductImageUrl(doc, finalUrl, title, productSchema);
     }
