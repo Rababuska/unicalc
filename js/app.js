@@ -583,28 +583,91 @@
 
 function getSouvenirProductImageUrl(doc, pageUrl, productName, productSchema) {
     const structuredImage = productImageValue(productSchema && productSchema.image);
-    const metaImage = doc.querySelector('meta[property="og:image"]')?.content
-      || doc.querySelector('meta[name="twitter:image"]')?.content
-      || '';
+    const metaCandidates = [
+      doc.querySelector('meta[property="og:image"]')?.content,
+      doc.querySelector('meta[property="og:image:secure_url"]')?.content,
+      doc.querySelector('meta[name="twitter:image"]')?.content,
+      doc.querySelector('meta[name="twitter:image:src"]')?.content,
+      doc.querySelector('link[rel="image_src"]')?.getAttribute('href'),
+      doc.querySelector('[itemprop="image"]')?.getAttribute('content'),
+      doc.querySelector('[itemprop="image"]')?.getAttribute('src')
+    ].filter(Boolean);
+
+    function extractImg(img) {
+      if (!img) return '';
+      const srcset = img.getAttribute('srcset') || img.getAttribute('data-srcset') || '';
+      if (srcset) {
+        const first = srcset.split(',')[0].trim().split(/\s+/)[0];
+        if (first) return first;
+      }
+      return img.getAttribute('data-src')
+        || img.getAttribute('data-original')
+        || img.getAttribute('data-lazy')
+        || img.getAttribute('data-zoom-image')
+        || img.getAttribute('data-full')
+        || img.getAttribute('data-image')
+        || img.getAttribute('src')
+        || '';
+    }
+
+    const gallerySelectors = [
+      '.detail-gallery img', '.product-gallery img', '.product-slider img',
+      '.product-images img', '.catalog-element-gallery img', '.gallery img',
+      '.product-photo img', '.slider-for img', '.swiper-slide img',
+      'a[data-fancybox] img', 'a.fancybox img', '.product-detail-slider img',
+      '.detail-picture img', '.product-item-detail-slider-image img',
+      '.catalog-element-photos img'
+    ];
+    const galleryImages = Array.from(doc.querySelectorAll(gallerySelectors.join(', '))).map(extractImg).filter(Boolean);
+
+    const galleryAnchorLinks = Array.from(doc.querySelectorAll('a[data-fancybox], a.fancybox, a.detail-picture, .detail-gallery a, .product-gallery a')).map(function (a) {
+      return a.getAttribute('href') || a.getAttribute('data-src') || '';
+    }).filter(function (href) {
+      return /\.(?:jpe?g|png|webp)(?:$|\?)/i.test(href);
+    });
+
     const normalizedName = String(productName || '').replace(/\s+/g, ' ').trim().toLowerCase();
-    const matchingImages = Array.from(doc.images).filter(function (image) {
+    const matchingAltImages = Array.from(doc.images).filter(function (image) {
       const alt = String(image.alt || '').replace(/\s+/g, ' ').trim().toLowerCase();
       return alt && (alt === normalizedName || normalizedName.includes(alt) || alt.includes(normalizedName));
-    }).map(function (image) {
-      return image.getAttribute('data-src') || image.getAttribute('data-original') || image.getAttribute('srcset')?.split(',')[0].trim().split(/\s+/)[0] || image.getAttribute('src') || '';
+    }).map(extractImg).filter(Boolean);
+
+    const articleCode = pageUrl.match(/articul[_-]([a-zA-Z0-9_-]+)/i)?.[1]
+      || pageUrl.match(/\/item\/([0-9-]+)/i)?.[1]
+      || pageUrl.match(/id\/(\d+)/i)?.[1];
+    const articleImages = articleCode ? Array.from(doc.images).map(extractImg).filter(function (src) {
+      return src && src.includes(articleCode);
+    }) : [];
+
+    const uploadImages = Array.from(doc.images).map(extractImg).filter(function (src) {
+      return /(?:\/upload\/(?:iblock|resize_cache|catalog|products|1c_catalog)|\/images\/products\/|oasiscatalog\.com\/.*\/images\/)/i.test(src);
     });
-    const articleCode = pageUrl.match(/articul[_-](\d+)/i)?.[1];
-    const articleImages = articleCode ? Array.from(doc.images).map(function (image) {
-      return image.getAttribute('data-src') || image.getAttribute('data-original') || image.getAttribute('srcset')?.split(',')[0].trim().split(/\s+/)[0] || image.getAttribute('src') || '';
-    }).filter(function (source) { return source && source.includes(articleCode); }) : [];
-    const candidates = [structuredImage, metaImage].concat(matchingImages, articleImages);
+
+    const allDocImages = Array.from(doc.images).map(extractImg);
+
+    const candidates = [
+      structuredImage,
+      ...metaCandidates,
+      ...galleryImages,
+      ...galleryAnchorLinks,
+      ...matchingAltImages,
+      ...articleImages,
+      ...uploadImages,
+      ...allDocImages
+    ];
+
     for (let index = 0; index < candidates.length; index++) {
-      const candidate = String(candidates[index] || '').trim();
+      let candidate = String(candidates[index] || '').trim();
       if (!candidate || candidate.startsWith('data:image/gif')) continue;
+      if (/(?:logo|icon|favicon|sprite|payment|avatar|banner|blank|pixel|loader|preloader|\.svg|1x1|bitrix\/templates|bitrix\/images)/i.test(candidate)) continue;
+
+      if (candidate.startsWith('//')) candidate = 'https:' + candidate;
       try {
         const imageUrl = new URL(candidate, pageUrl);
         if (imageUrl.protocol === 'http:') imageUrl.protocol = 'https:';
-        if (imageUrl.protocol === 'https:' && !/\.svg(?:$|\?)/i.test(imageUrl.pathname)) return imageUrl.href;
+        if (imageUrl.protocol === 'https:' && !/\.svg(?:$|\?)/i.test(imageUrl.pathname)) {
+          return imageUrl.href;
+        }
       } catch (error) {
         continue;
       }
@@ -635,10 +698,7 @@ function getSouvenirProductImageUrl(doc, pageUrl, productName, productSchema) {
     if (!pageUrl) throw new Error('Вставьте HTTPS-ссылку из поддерживаемого каталога');
     const pageResponse = await fetchSouvenirResource(pageUrl, 'Не удалось получить страницу товара из браузера.');
     if (!pageResponse.ok) throw new Error('Каталог не ответил: ' + pageResponse.status);
-    const responseUrl = new URL(pageResponse.url || pageUrl);
-    const isProxyResponse = responseUrl.hostname.includes('workers.dev') || (responseUrl.hostname === '127.0.0.1' && responseUrl.port === '8767');
-    const finalUrl = normalizeSouvenirProductUrl(isProxyResponse ? pageUrl : responseUrl.href);
-    if (!finalUrl) throw new Error('Ссылка перенаправила на неподдерживаемый сайт');
+    const finalUrl = pageUrl;
     const html = await pageResponse.text();
     const doc = new DOMParser().parseFromString(html, 'text/html');
     let productSchema = null;
@@ -654,21 +714,9 @@ function getSouvenirProductImageUrl(doc, pageUrl, productName, productSchema) {
     const socialTitle = String(doc.querySelector('meta[property="og:title"]')?.content || doc.title || '').replace(/\s+/g, ' ').trim();
     const title = String(productSchema && productSchema.name || heading || socialTitle).replace(/\s+/g, ' ').trim();
     const fullTitle = String(heading || productSchema && productSchema.name || socialTitle || title).replace(/\s+/g, ' ').trim();
-if (!title) throw new Error('Не удалось найти название товара на странице');
-    
-    let imageUrl = getSouvenirProductImageUrl(doc, finalUrl, title, productSchema);
-    
-    // Жесткий fallback для Happy Gifts: ищем ссылку на фото прямо в сыром тексте HTML
-    if (!imageUrl && html) {
-      const rawMatch = html.match(/["']([^"']+\/upload\/(?:iblock|resize_cache)[^"']+\.(?:jpg|jpeg|png|webp))["']/i);
-      if (rawMatch) {
-        let path = rawMatch[1];
-        if (path.startsWith('//')) path = 'https:' + path;
-        try { imageUrl = new URL(path, finalUrl).href; } catch(e) {}
-      }
-    }
-    
-    if (!imageUrl) throw new Error('На странице не нашлась главная фотография товара (вероятно, нестандартная галерея)');
+    if (!title) throw new Error('Не удалось найти название товара на странице');
+    const imageUrl = getSouvenirProductImageUrl(doc, finalUrl, title, productSchema);
+    if (!imageUrl) throw new Error('На странице не нашлась главная фотография товара');
     const imageResponse = await fetchSouvenirResource(imageUrl, 'Карточка товара открылась, но сайт не разрешил загрузить фото. Попробуйте другую ссылку или ручной ввод.');
     if (!imageResponse.ok) throw new Error('Не удалось загрузить фотографию товара');
     const imageBlob = await imageResponse.blob();
@@ -682,6 +730,7 @@ if (!title) throw new Error('Не удалось найти название т�
     bitmap.close();
     const photo = canvas.toDataURL('image/jpeg', 0.84);
     return { title: title, fullTitle: fullTitle, photo: photo, sourceUrl: finalUrl };
+  }
   }
 
   function closeProductCalculatorDialog() {
