@@ -702,8 +702,30 @@ function getSouvenirProductImageUrl(doc, pageUrl, productName, productSchema) {
     const socialTitle = String(doc.querySelector('meta[property="og:title"]')?.content || doc.title || '').replace(/\s+/g, ' ').trim();
     const title = String(productSchema && productSchema.name || heading || socialTitle).replace(/\s+/g, ' ').trim();
     const fullTitle = String(heading || productSchema && productSchema.name || socialTitle || title).replace(/\s+/g, ' ').trim();
-    if (!title) throw new Error('Не удалось найти название товара на странице');
-    const imageUrl = getSouvenirProductImageUrl(doc, finalUrl, title, productSchema);
+if (!title) throw new Error('Не удалось найти название товара на странице');
+    let imageUrl = '';
+
+    // Жесткий прямой захват фото для Happy Gifts из тега <link itemprop="image">
+    if (finalUrl.includes('happygifts.ru')) {
+      const happyLinkMatch = html.match(/<link[^>]+itemprop=["']image["'][^>]+href=["']([^"']+)["']/i)
+        || html.match(/<link[^>]+href=["']([^"']+)["'][^>]+itemprop=["']image["']/i)
+        || html.match(/["']((?:https?:\/\/[^"'\s<>]+)?\/catalog-images\/[^"'\s<>]+\.(?:jpe?g|png|webp))["']/i);
+
+      if (happyLinkMatch && happyLinkMatch[1]) {
+        let rawHref = happyLinkMatch[1].trim();
+        if (rawHref.startsWith('//')) rawHref = 'https:' + rawHref;
+        try {
+          imageUrl = new URL(rawHref, finalUrl).href;
+        } catch (error) {
+          imageUrl = rawHref;
+        }
+      }
+    }
+
+    // Для остальных каталогов или если тег не найден
+    if (!imageUrl) {
+      imageUrl = getSouvenirProductImageUrl(doc, finalUrl, title, productSchema);
+    }
     if (!imageUrl) throw new Error('На странице не нашлась главная фотография товара');
     const imageResponse = await fetchSouvenirResource(imageUrl, 'Карточка товара открылась, но сайт не разрешил загрузить фото. Попробуйте другую ссылку или ручной ввод.');
     if (!imageResponse.ok) throw new Error('Не удалось загрузить фотографию товара');
