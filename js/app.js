@@ -715,10 +715,9 @@ function getSouvenirProductImageUrl(doc, pageUrl, productName, productSchema) {
     canvas.width = Math.max(1, Math.round(bitmap.width * scale));
     canvas.height = Math.max(1, Math.round(bitmap.height * scale));
     canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    bitmap.close();
+   bitmap.close();
     const photo = canvas.toDataURL('image/jpeg', 0.84);
     return { title: title, fullTitle: fullTitle, photo: photo, sourceUrl: finalUrl };
-  }
   }
 
   function closeProductCalculatorDialog() {
