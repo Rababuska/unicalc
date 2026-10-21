@@ -583,15 +583,24 @@
 
 function getSouvenirProductImageUrl(doc, pageUrl, productName, productSchema) {
     const structuredImage = productImageValue(productSchema && productSchema.image);
-    const metaCandidates = [
-      doc.querySelector('meta[property="og:image"]')?.content,
-      doc.querySelector('meta[property="og:image:secure_url"]')?.content,
-      doc.querySelector('meta[name="twitter:image"]')?.content,
-      doc.querySelector('meta[name="twitter:image:src"]')?.content,
-      doc.querySelector('link[rel="image_src"]')?.getAttribute('href'),
-      doc.querySelector('[itemprop="image"]')?.getAttribute('content'),
-      doc.querySelector('[itemprop="image"]')?.getAttribute('src')
-    ].filter(Boolean);
+    
+    // Считывание ссылки из тега link itemprop="image" (основной формат Happy Gifts)
+    const itempropImage = doc.querySelector('link[itemprop="image"]')?.getAttribute('href')
+      || doc.querySelector('[itemprop="image"]')?.getAttribute('href')
+      || doc.querySelector('[itemprop="image"]')?.getAttribute('content')
+      || doc.querySelector('[itemprop="image"]')?.getAttribute('src')
+      || '';
+
+    const metaImage = doc.querySelector('meta[property="og:image"]')?.content
+      || doc.querySelector('meta[property="og:image:secure_url"]')?.content
+      || doc.querySelector('meta[name="twitter:image"]')?.content
+      || doc.querySelector('link[rel="image_src"]')?.getAttribute('href')
+      || '';
+
+    // Прямой захват ссылок на папку /catalog-images/ (Happy Gifts)
+    const catalogImages = Array.from(doc.querySelectorAll('link[href*="catalog-images"], a[href*="catalog-images"], img[src*="catalog-images"], img[data-src*="catalog-images"]')).map(function (el) {
+      return el.getAttribute('href') || el.getAttribute('data-src') || el.getAttribute('src') || '';
+    }).filter(Boolean);
 
     function extractImg(img) {
       if (!img) return '';
@@ -604,30 +613,12 @@ function getSouvenirProductImageUrl(doc, pageUrl, productName, productSchema) {
         || img.getAttribute('data-original')
         || img.getAttribute('data-lazy')
         || img.getAttribute('data-zoom-image')
-        || img.getAttribute('data-full')
-        || img.getAttribute('data-image')
         || img.getAttribute('src')
         || '';
     }
 
-    const gallerySelectors = [
-      '.detail-gallery img', '.product-gallery img', '.product-slider img',
-      '.product-images img', '.catalog-element-gallery img', '.gallery img',
-      '.product-photo img', '.slider-for img', '.swiper-slide img',
-      'a[data-fancybox] img', 'a.fancybox img', '.product-detail-slider img',
-      '.detail-picture img', '.product-item-detail-slider-image img',
-      '.catalog-element-photos img'
-    ];
-    const galleryImages = Array.from(doc.querySelectorAll(gallerySelectors.join(', '))).map(extractImg).filter(Boolean);
-
-    const galleryAnchorLinks = Array.from(doc.querySelectorAll('a[data-fancybox], a.fancybox, a.detail-picture, .detail-gallery a, .product-gallery a')).map(function (a) {
-      return a.getAttribute('href') || a.getAttribute('data-src') || '';
-    }).filter(function (href) {
-      return /\.(?:jpe?g|png|webp)(?:$|\?)/i.test(href);
-    });
-
     const normalizedName = String(productName || '').replace(/\s+/g, ' ').trim().toLowerCase();
-    const matchingAltImages = Array.from(doc.images).filter(function (image) {
+    const matchingImages = Array.from(doc.images).filter(function (image) {
       const alt = String(image.alt || '').replace(/\s+/g, ' ').trim().toLowerCase();
       return alt && (alt === normalizedName || normalizedName.includes(alt) || alt.includes(normalizedName));
     }).map(extractImg).filter(Boolean);
@@ -635,31 +626,28 @@ function getSouvenirProductImageUrl(doc, pageUrl, productName, productSchema) {
     const articleCode = pageUrl.match(/articul[_-]([a-zA-Z0-9_-]+)/i)?.[1]
       || pageUrl.match(/\/item\/([0-9-]+)/i)?.[1]
       || pageUrl.match(/id\/(\d+)/i)?.[1];
-    const articleImages = articleCode ? Array.from(doc.images).map(extractImg).filter(function (src) {
-      return src && src.includes(articleCode);
+    const articleImages = articleCode ? Array.from(doc.images).map(extractImg).filter(function (source) {
+      return source && source.includes(articleCode);
     }) : [];
 
     const uploadImages = Array.from(doc.images).map(extractImg).filter(function (src) {
-      return /(?:\/upload\/(?:iblock|resize_cache|catalog|products|1c_catalog)|\/images\/products\/|oasiscatalog\.com\/.*\/images\/)/i.test(src);
+      return /(?:\/upload\/|\/images\/products\/|oasiscatalog\.com\/.*\/images\/)/i.test(src);
     });
-
-    const allDocImages = Array.from(doc.images).map(extractImg);
 
     const candidates = [
       structuredImage,
-      ...metaCandidates,
-      ...galleryImages,
-      ...galleryAnchorLinks,
-      ...matchingAltImages,
+      itempropImage,
+      metaImage,
+      ...catalogImages,
+      ...matchingImages,
       ...articleImages,
-      ...uploadImages,
-      ...allDocImages
+      ...uploadImages
     ];
 
     for (let index = 0; index < candidates.length; index++) {
       let candidate = String(candidates[index] || '').trim();
       if (!candidate || candidate.startsWith('data:image/gif')) continue;
-      if (/(?:logo|icon|favicon|sprite|payment|avatar|banner|blank|pixel|loader|preloader|\.svg|1x1|bitrix\/templates|bitrix\/images)/i.test(candidate)) continue;
+      if (/(?:logo|icon|favicon|sprite|payment|avatar|banner|blank|pixel|loader|preloader|\.svg|1x1)/i.test(candidate)) continue;
 
       if (candidate.startsWith('//')) candidate = 'https:' + candidate;
       try {
