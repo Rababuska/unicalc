@@ -706,24 +706,34 @@ const heading = String(doc.querySelector('h1')?.textContent || '').replace(/\s+/
 
     let imageUrl = '';
 
-    // Прямой захват тега <link itemprop="image"> и папки /catalog-images/ из сырого HTML Happy Gifts
+    // Прямой захват фото Happy Gifts строго из тега <link itemprop="image" href="...">
     if (finalUrl.includes('happygifts.ru')) {
-      const rawHappyMatch = html.match(/<link[^>]+itemprop=["']image["'][^>]+href=["']([^"']+)["']/i)
-        || html.match(/<link[^>]+href=["']([^"']+)["'][^>]+itemprop=["']image["']/i)
+      const linkMatch = html.match(/<link\b[^>]*\bitemprop=["']image["'][^>]*\bhref=["']([^"']+)["']/i)
+        || html.match(/<link\b[^>]*\bhref=["']([^"']+)["'][^>]*\bitemprop=["']image["']/i)
+        || html.match(/\bitemprop=["']image["'][^>]*\bhref=["']([^"']+)["']/i)
         || html.match(/["']((?:https?:\/\/[^"'\s<>]+)?\/catalog-images\/[^"'\s<>]+\.(?:jpe?g|png|webp))["']/i);
 
-      if (rawHappyMatch && rawHappyMatch[1]) {
-        let matchedPath = rawHappyMatch[1].trim();
-        if (matchedPath.startsWith('//')) matchedPath = 'https:' + matchedPath;
-        try {
-          imageUrl = new URL(matchedPath, finalUrl).href;
-        } catch (e) {
-          imageUrl = matchedPath;
+      if (linkMatch && linkMatch[1]) {
+        imageUrl = linkMatch[1].trim();
+      }
+
+      // Страховка для страниц с выбором цвета (например, color_zhelty), если тег itemprop опущен
+      if (!imageUrl) {
+        const artMatch = finalUrl.match(/articul[_-]([a-zA-Z0-9_-]+)/i);
+        if (artMatch && artMatch[1]) {
+          const artRegex = new RegExp('["\']([^"\'\\s<>]*(?:catalog-images|upload)[^"\'\\s<>]*' + artMatch[1] + '[^"\'\\s<>]*\\.(?:jpe?g|png|webp)(?:\\?[^"\'\\s<>]*)?)["\']', 'i');
+          const artRes = html.match(artRegex);
+          if (artRes && artRes[1]) imageUrl = artRes[1].trim();
         }
+      }
+
+      if (imageUrl) {
+        if (imageUrl.startsWith('//')) imageUrl = 'https:' + imageUrl;
+        try { imageUrl = new URL(imageUrl, finalUrl).href; } catch (e) {}
       }
     }
 
-    // Стандартный парсинг для остальных каталогов (Gifts, Oasis, Arte, Portobello)
+    // Для остальных каталогов (Gifts, Oasis, Arte, Portobello)
     if (!imageUrl) {
       imageUrl = getSouvenirProductImageUrl(doc, finalUrl, title, productSchema);
     }
