@@ -534,6 +534,9 @@
   function normalizeSouvenirProductUrl(value) {
     try {
       const url = new URL(String(value || '').trim());
+      if (url.hostname.startsWith('www.')) {
+        url.hostname = url.hostname.slice(4);
+      }
       const allowedHosts = ['happygifts.ru', 'artegifts.by', 'oasiscatalog.com', 'gifts.ru', 'portobello.ru', 'ucontay.kz'];
       const isAllowedHost = allowedHosts.some(function (host) {
         return url.hostname === host || url.hostname.endsWith('.' + host);
