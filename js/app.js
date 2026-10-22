@@ -984,7 +984,7 @@ const editableDetails = document.createElement('span');
     row.appendChild(cell);
   }
 
-  function addRunValues(row, runItems, field, getValue, className) {
+function addRunValues(row, runItems, field, getValue, className) {
     const cell = document.createElement('td');
     if (className) cell.className = className;
     runItems.forEach(function (item) {
@@ -1039,6 +1039,12 @@ const editableDetails = document.createElement('span');
     title.dataset.editId = item.id;
     title.dataset.editField = 'title';
     title.textContent = item.title;
+    title.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        title.blur();
+      }
+    });
     cell.addEventListener('click', function (event) {
       if (event.target === cell) title.focus();
     });
