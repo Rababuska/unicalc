@@ -24,8 +24,12 @@
 
     .header-manager-controls { display: flex; align-items: center; gap: 12px; }
 
-    .header-manager-status { color: #e1e6ec; font-size: 13px; white-space: nowrap; }
-
+    .header-manager-status { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 4px; font-size: 13px; font-weight: 600; white-space: nowrap; background: #28a745; color: #fff; }
+    .header-manager-status.not-auth { background: #6c757d; font-weight: normal; }
+    .cloud-sync-badge { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; white-space: nowrap; background: #007bff; color: #fff; transition: background-color 0.2s ease; }
+    .cloud-sync-badge.syncing { background: #ffc107; color: #212529; }
+    .cloud-sync-badge.offline { background: #6c757d; color: #fff; }
+    .cloud-sync-badge.error { background: #dc3545; color: #fff; }
     .header-manager-controls .secondary-btn { min-height: 36px; }
 
     .manager-login-fields { display: grid; gap: 12px; margin: 16px 0; }
@@ -357,7 +361,8 @@
     <img class="brand-logo" src="https://vto.kz/wp-content/uploads/2013/03/251.png" alt="VTO" width="168" height="20">
 
     <div class="header-manager-controls">
-      <span class="header-manager-status" id="manager-auth-status" role="status">Вход не выполнен</span>
+      <span class="header-manager-status not-auth" id="manager-auth-status" role="status">Вход не выполнен</span>
+      <span class="cloud-sync-badge" id="cloud-sync-status" role="status" title="Связь с Google Таблицей">☁️ Онлайн</span>
       <button class="secondary-btn" id="btn-manager-login" type="button">Войти</button>
     </div>
 
