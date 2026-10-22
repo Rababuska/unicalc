@@ -824,13 +824,125 @@ async function fetchSouvenirResource(url, errorMessage) {
       });
     }
 
-    const editableDetails = document.createElement('span');
+const editableDetails = document.createElement('span');
     editableDetails.className = 'quote-editable';
     editableDetails.contentEditable = 'true';
     editableDetails.dataset.editId = item.id;
     editableDetails.dataset.editField = 'details';
     editableDetails.textContent = baseDetails;
+    editableDetails.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        editableDetails.blur();
+      }
+    });
     cell.appendChild(editableDetails);
+
+    annotations.forEach(function (annotation, annotationIndex) {
+      const annotationLine = document.createElement('div');
+      annotationLine.className = 'quote-annotation-line';
+      const annotationText = document.createElement('span');
+      annotationText.className = 'quote-annotation-text';
+      const visibleAnnotationText = plainText(annotation.annotationText || annotation.details);
+      annotationText.textContent = visibleAnnotationText;
+      if (visibleAnnotationText) annotationLine.appendChild(annotationText);
+
+      const editLabel = annotations.length > 1 ? 'Изменить нанесение ' + (annotationIndex + 1) : 'Изменить нанесение';
+      const editButton = createQuoteActionButton(editLabel, '<path d="m16 4 4 4L8 20H4v-4L16 4z"/><path d="m14 6 4 4"/>');
+      editButton.dataset.editDecorationId = item.id;
+      editButton.dataset.annotationIndex = String(annotationIndex);
+      editButton.title = visibleAnnotationText ? editLabel + ': ' + visibleAnnotationText : editLabel;
+      editButton.setAttribute('aria-label', editButton.title);
+      annotationLine.appendChild(editButton);
+
+      const removeButton = createQuoteActionButton('Убрать нанесение ' + (annotationIndex + 1), '<path d="M3 6h18M8 6V4h8v2m3 0-1 14H6L5 6m5 5v5m4-5v5"/>', 'remove-action');
+      removeButton.dataset.removeAnnotationId = item.id;
+      removeButton.dataset.annotationIndex = String(annotationIndex);
+      annotationLine.appendChild(removeButton);
+      cell.appendChild(annotationLine);
+    });
+
+    const directStockServices = !annotations.length && item.souvenirMode === 'sklad' && Array.isArray(item.services) ? item.services : [];
+    if (directStockServices.length) {
+      const annotationLine = document.createElement('div');
+      annotationLine.className = 'quote-annotation-line';
+      const editButton = createQuoteActionButton('Изменить нанесение', '<path d="m16 4 4 4L8 20H4v-4L16 4z"/><path d="m14 6 4 4"/>');
+      editButton.dataset.editStockDecorationId = item.id;
+      annotationLine.appendChild(editButton);
+      const removeButton = createQuoteActionButton('Убрать нанесение', '<path d="M3 6h18M8 6V4h8v2m3 0-1 14H6L5 6m5 5v5m4-5v5"/>', 'remove-action');
+      removeButton.dataset.removeStockDecorationId = item.id;
+      annotationLine.appendChild(removeButton);
+      cell.appendChild(annotationLine);
+    }
+    row.appendChild(cell);
+    return cell;
+  }
+
+  function addValuesCell(row, items, field, getValue, className) {
+    const cell = document.createElement('td');
+    if (className) cell.className = className;
+    items.forEach(function (item) {
+      const value = document.createElement('div');
+      value.className = 'quote-run-value quote-editable';
+      value.contentEditable = 'true';
+      value.dataset.editId = item.id;
+      value.dataset.editField = field;
+      value.textContent = getValue(item);
+      cell.appendChild(value);
+    });
+    row.appendChild(cell);
+    return cell;
+  }
+
+  function addQuantityCell(row, runItems, item) {
+    const cell = document.createElement('td');
+    cell.className = 'quote-quantity-cell';
+    const addControls = createDuplicateRunControls(item);
+    addControls.classList.add('quote-quantity-tools');
+    cell.appendChild(addControls);
+    runItems.forEach(function (run, runIndex) {
+      const quantityRow = document.createElement('div');
+      quantityRow.className = 'quote-quantity-run';
+      const value = document.createElement('div');
+      value.className = 'quote-run-value quote-editable';
+      value.contentEditable = 'true';
+      value.dataset.editId = run.id;
+      value.dataset.editField = 'quantity';
+      value.setAttribute('aria-label', 'Количество тиража ' + (runIndex + 1));
+      value.textContent = String(run.quantity);
+      quantityRow.appendChild(value);
+      if (runIndex > 0) {
+        const removeButton = createQuoteActionButton('Удалить тираж ' + (runIndex + 1), '<path d="M3 6h18M8 6V4h8v2m3 0-1 14H6L5 6m4 5v5m4-5v5"/>', 'remove-action');
+        removeButton.dataset.removeId = run.id;
+        quantityRow.appendChild(removeButton);
+      }
+      cell.appendChild(quantityRow);
+    });
+    row.appendChild(cell);
+    return cell;
+  }
+
+  function addTitleCell(row, item) {
+    const cell = document.createElement('td');
+    cell.className = 'quote-title';
+    cell.tabIndex = 0;
+    cell.setAttribute('aria-label', 'Название позиции и область вставки фото');
+    const title = document.createElement('span');
+    title.className = 'quote-title-text quote-editable';
+    title.contentEditable = 'true';
+    title.dataset.editId = item.id;
+    title.dataset.editField = 'title';
+    title.textContent = item.title;
+    title.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        title.blur();
+      }
+    });
+    cell.addEventListener('click', function (event) {
+      if (event.target === cell) title.focus();
+    });
+    cell.appendChild(title);
 
     annotations.forEach(function (annotation, annotationIndex) {
       const annotationLine = document.createElement('div');
@@ -1413,7 +1525,7 @@ async function fetchSouvenirResource(url, errorMessage) {
       : 'Создано новое КП без сохранения предыдущего.';
   }
 
-  function editQuoteCell(cell) {
+function editQuoteCell(cell) {
     const id = cell.dataset.editId;
     const field = cell.dataset.editField;
     const value = cell.innerText.trim();
@@ -1425,7 +1537,14 @@ async function fetchSouvenirResource(url, errorMessage) {
         const groupId = OrderFinance.runGroupKey(item);
         OrderState.getItems().filter(function (run) {
           return OrderFinance.runGroupKey(run) === groupId;
-        }).forEach(function (run) { OrderState.update(run.id, { [field]: nextValue }); });
+        }).forEach(function (run) {
+          const updates = { [field]: nextValue };
+          // Фиксируем ручную правку описания в baseDetails, чтобы нанесения не стирали текст
+          if (field === 'details') {
+            updates.baseDetails = nextValue;
+          }
+          OrderState.update(run.id, updates);
+        });
       } else {
         OrderState.update(id, { [field]: nextValue });
       }
