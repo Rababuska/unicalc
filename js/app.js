@@ -663,7 +663,7 @@ function getSouvenirProductImageUrl(doc, pageUrl, productName, productSchema) {
     return '';
   }
 
-  async function fetchSouvenirResource(url, errorMessage) {
+async function fetchSouvenirResource(url, errorMessage) {
     const proxyUrl = 'https://gifts-proxy.subilmur.workers.dev/?url=' + encodeURIComponent(url);
     try {
       const response = await fetch(proxyUrl, { credentials: 'omit' });
@@ -698,58 +698,36 @@ function getSouvenirProductImageUrl(doc, pageUrl, productName, productSchema) {
       }
       return Boolean(productSchema);
     });
-const heading = String(doc.querySelector('h1')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const heading = String(doc.querySelector('h1')?.textContent || '').replace(/\s+/g, ' ').trim();
     const socialTitle = String(doc.querySelector('meta[property="og:title"]')?.content || doc.title || '').replace(/\s+/g, ' ').trim();
     const title = String(productSchema && productSchema.name || heading || socialTitle).replace(/\s+/g, ' ').trim();
     const fullTitle = String(heading || productSchema && productSchema.name || socialTitle || title).replace(/\s+/g, ' ').trim();
     if (!title) throw new Error('Не удалось найти название товара на странице');
 
-    let imageUrl = '';
+    const imageUrl = getSouvenirProductImageUrl(doc, finalUrl, title, productSchema, html);
+    let photo = null;
 
-    // Прямой захват фото Happy Gifts строго из тега <link itemprop="image" href="...">
-    if (finalUrl.includes('happygifts.ru')) {
-      const linkMatch = html.match(/<link\b[^>]*\bitemprop=["']image["'][^>]*\bhref=["']([^"']+)["']/i)
-        || html.match(/<link\b[^>]*\bhref=["']([^"']+)["'][^>]*\bitemprop=["']image["']/i)
-        || html.match(/\bitemprop=["']image["'][^>]*\bhref=["']([^"']+)["']/i)
-        || html.match(/["']((?:https?:\/\/[^"'\s<>]+)?\/catalog-images\/[^"'\s<>]+\.(?:jpe?g|png|webp))["']/i);
-
-      if (linkMatch && linkMatch[1]) {
-        imageUrl = linkMatch[1].trim();
-      }
-
-      // Страховка для страниц с выбором цвета (например, color_zhelty), если тег itemprop опущен
-      if (!imageUrl) {
-        const artMatch = finalUrl.match(/articul[_-]([a-zA-Z0-9_-]+)/i);
-        if (artMatch && artMatch[1]) {
-          const artRegex = new RegExp('["\']([^"\'\\s<>]*(?:catalog-images|upload)[^"\'\\s<>]*' + artMatch[1] + '[^"\'\\s<>]*\\.(?:jpe?g|png|webp)(?:\\?[^"\'\\s<>]*)?)["\']', 'i');
-          const artRes = html.match(artRegex);
-          if (artRes && artRes[1]) imageUrl = artRes[1].trim();
+    if (imageUrl) {
+      try {
+        const imageResponse = await fetchSouvenirResource(imageUrl, 'Не удалось загрузить фото');
+        if (imageResponse && imageResponse.ok) {
+          const imageBlob = await imageResponse.blob();
+          if (imageBlob.type.startsWith('image/')) {
+            const bitmap = await createImageBitmap(imageBlob);
+            const scale = Math.min(1, 1200 / Math.max(bitmap.width, bitmap.height));
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+            canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+            canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+            bitmap.close();
+            photo = canvas.toDataURL('image/jpeg', 0.84);
+          }
         }
-      }
-
-      if (imageUrl) {
-        if (imageUrl.startsWith('//')) imageUrl = 'https:' + imageUrl;
-        try { imageUrl = new URL(imageUrl, finalUrl).href; } catch (e) {}
+      } catch (e) {
+        photo = null;
       }
     }
 
-    // Для остальных каталогов (Gifts, Oasis, Arte, Portobello)
-    if (!imageUrl) {
-      imageUrl = getSouvenirProductImageUrl(doc, finalUrl, title, productSchema);
-    }
-    if (!imageUrl) throw new Error('На странице не нашлась главная фотография товара');
-    const imageResponse = await fetchSouvenirResource(imageUrl, 'Карточка товара открылась, но сайт не разрешил загрузить фото. Попробуйте другую ссылку или ручной ввод.');
-    if (!imageResponse.ok) throw new Error('Не удалось загрузить фотографию товара');
-    const imageBlob = await imageResponse.blob();
-    if (!imageBlob.type.startsWith('image/')) throw new Error('Ссылка товара вернула не изображение');
-    const bitmap = await createImageBitmap(imageBlob);
-    const scale = Math.min(1, 1200 / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-   bitmap.close();
-    const photo = canvas.toDataURL('image/jpeg', 0.84);
     return { title: title, fullTitle: fullTitle, photo: photo, sourceUrl: finalUrl };
   }
 
