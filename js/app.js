@@ -1324,6 +1324,24 @@ function addRunValues(row, runItems, field, getValue, className) {
     }
   }
 
+function setCloudSyncStatus(state, customText) {
+    const badge = document.getElementById('cloud-sync-status');
+    if (!badge) return;
+    badge.classList.remove('syncing', 'offline', 'error');
+    if (state === 'syncing') {
+      badge.classList.add('syncing');
+      badge.textContent = customText || '⏳ Синхронизация...';
+    } else if (state === 'offline') {
+      badge.classList.add('offline');
+      badge.textContent = customText || '💾 Локальный режим';
+    } else if (state === 'error') {
+      badge.classList.add('error');
+      badge.textContent = customText || '⚠️ Ошибка Google';
+    } else {
+      badge.textContent = customText || '☁️ Онлайн';
+    }
+  }
+
   function renderManagerAuthStatus() {
     const status = document.getElementById('manager-auth-status');
     const loginButton = document.getElementById('btn-manager-login');
@@ -1331,13 +1349,17 @@ function addRunValues(row, runItems, field, getValue, className) {
       ? LegacyBridge.getPolyPdfDependencies().manager
       : null;
     if (manager) {
-      status.textContent = 'Менеджер: ' + (manager.name || manager.id);
-      loginButton.textContent = 'Сменить пользователя';
+      status.classList.remove('not-auth');
+      status.innerHTML = '● Менеджер: <strong>' + (manager.name || manager.id) + '</strong>';
+      loginButton.textContent = 'Сменить пользователя / Выйти';
       loginButton.setAttribute('aria-label', 'Сменить пользователя или выйти');
+      setCloudSyncStatus('online');
     } else {
+      status.classList.add('not-auth');
       status.textContent = 'Вход не выполнен';
       loginButton.textContent = 'Войти';
-      loginButton.setAttribute('aria-label', 'Войти в полиграфический калькулятор');
+      loginButton.setAttribute('aria-label', 'Войти в систему');
+      setCloudSyncStatus('offline');
     }
   }
 
@@ -1383,58 +1405,53 @@ function addRunValues(row, runItems, field, getValue, className) {
       return managerId ? (!record.managerId || String(record.managerId) === String(managerId)) : true;
     });
     const records = allRecords.filter(function (record) {
-      const searchable = [record.company, record.createdAt, record.summary].join(' ').toLowerCase();
-      return !query || searchable.includes(query);
+      if (!query) return true;
+      const text = [record.company, record.summary, record.date, record.total].filter(Boolean).join(' ').toLowerCase();
+      return text.includes(query);
     });
-    if (records.length === 0) {
-      const empty = document.createElement('p');
-      empty.className = 'calc-status';
-      empty.textContent = query ? 'Ничего не найдено' : 'Сохраненных КП пока нет';
-      list.appendChild(empty);
-      return;
-    }
+    document.getElementById('history-count').textContent = String(records.length);
     records.forEach(function (record) {
-      const entry = document.createElement('article');
-      entry.className = 'history-entry';
-      const meta = document.createElement('div');
-      meta.className = 'history-meta';
-      const title = document.createElement('strong');
+      const item = document.createElement('div');
+      item.className = 'history-item';
+      if (currentHistoryId && String(record.id) === String(currentHistoryId)) item.classList.add('current');
+      const header = document.createElement('div');
+      header.className = 'history-item-header';
+      const title = document.createElement('span');
+      title.className = 'history-item-title';
       title.textContent = record.company || 'Без названия компании';
-      const date = document.createElement('small');
-      date.textContent = new Intl.DateTimeFormat('ru-RU').format(new Date(record.createdAt));
-      const summary = document.createElement('small');
-      summary.textContent = (record.items || []).length + ' позиций · ' + OrderFinance.formatKzt(record.total || 0);
-      meta.append(title, date, summary);
+      const date = document.createElement('span');
+      date.className = 'history-item-date';
+      date.textContent = record.date || '';
+      header.append(title, date);
+      const summary = document.createElement('div');
+      summary.className = 'history-item-summary';
+      summary.textContent = record.summary || 'Нет описания состава';
+      const footer = document.createElement('div');
+      footer.className = 'history-item-footer';
+      const total = document.createElement('span');
+      total.className = 'history-item-total';
+      total.textContent = OrderFinance.formatAmount(record.total) + ' теңге';
       const actions = document.createElement('div');
-      actions.className = 'history-actions';
+      actions.className = 'history-item-actions';
       const loadButton = document.createElement('button');
       loadButton.className = 'secondary-btn';
       loadButton.type = 'button';
-      loadButton.dataset.loadHistoryId = record.id;
-      loadButton.textContent = 'Загрузить';
+      loadButton.textContent = 'Открыть';
+      loadButton.addEventListener('click', function () {
+        loadHistoryRecord(record.id);
+      });
       const deleteButton = document.createElement('button');
       deleteButton.className = 'danger-btn';
       deleteButton.type = 'button';
-      deleteButton.dataset.deleteHistoryId = record.id;
       deleteButton.textContent = 'Удалить';
+      deleteButton.addEventListener('click', function () {
+        deleteHistoryRecord(record.id);
+      });
       actions.append(loadButton, deleteButton);
-      entry.append(meta, actions);
-      list.appendChild(entry);
+      footer.append(total, actions);
+      item.append(header, summary, footer);
+      list.appendChild(item);
     });
-  }
-
-  function downloadJson(filename, data) {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(link.href);
-  }
-
-  function numberFromText(value) {
-    const number = Number(String(value).replace(/[^0-9,.-]/g, '').replace(',', '.'));
-    return Number.isFinite(number) ? number : 0;
   }
 
   function saveCurrentHistory() {
@@ -1458,6 +1475,10 @@ function addRunValues(row, runItems, field, getValue, className) {
     const existingRecord = OrderHistory.getRecords().find(function (record) {
       return currentHistoryId && String(record.id) === String(currentHistoryId);
     });
+
+    // Индикация отправки в Google Sheets
+    setCloudSyncStatus('syncing');
+
     const legacyRecord = LegacyBridge.savePolyHistory(items, company, currentHistoryId, includeVat, currentHistoryManagerId, total);
     const historyRecord = legacyRecord
       ? Object.assign({}, legacyRecord, {
@@ -1480,6 +1501,12 @@ function addRunValues(row, runItems, field, getValue, className) {
     currentHistoryManagerId = saved.managerId || managerId || null;
     persistCurrentHistoryId();
     renderHistory();
+
+    // Возврат в статус онлайн после отправки
+    setTimeout(function () {
+      setCloudSyncStatus(LegacyBridge.isPolyAuthenticated() ? 'online' : 'offline');
+    }, 1400);
+
     return saved;
   }
 
