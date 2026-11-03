@@ -812,11 +812,10 @@ async function fetchSouvenirResource(url, errorMessage) {
       ? activeModule === 'souvenir' && LegacyBridge.canAddDecoration()
       : LegacyBridge.canAdd(activeModule);
     const canKeepExistingDecoration = Boolean(editingAnnotation && pendingDecorationRestoreUnavailable && !ready);
-    const mustKeepUnrestoredAnnotation = Boolean(editingAnnotation && pendingDecorationRestoreUnavailable);
     addToKpButton.disabled = (!ready && !canKeepExistingDecoration) || (editingStockDecoration && pendingDecorationRestoreUnavailable);
     addToKpButton.textContent = decorationMode
       ? (activeModule === 'souvenir'
-        ? (mustKeepUnrestoredAnnotation || canKeepExistingDecoration
+        ? (canKeepExistingDecoration
           ? 'Оставить без изменений'
           : (editingAnnotation || editingStockDecoration ? 'Сохранить изменения' : (pendingItem.category === 'souvenir' ? 'Добавить в КП' : 'Добавить нанесение в позицию')))
         : 'Продолжить расчет нанесения')
@@ -829,7 +828,7 @@ async function fetchSouvenirResource(url, errorMessage) {
           : (ready ? 'Нанесение рассчитано. Сохраните изменения.' : 'Выберите услугу и выполните расчет нанесения'))
         : (editingAnnotation
         ? (ready ? (pendingDecorationRestoreUnavailable
-          ? 'В сохраненном КП нет исходных параметров нанесения. Изменения нельзя безопасно пересчитать; оставьте исходное КП без изменений. Чтобы пересчитать, удалите старое нанесение и добавьте его заново. Было: ' + previousDecoration
+          ? 'Исходные параметры нанесения отсутствовали. Новый расчет готов и заменит старую запись; проверьте цену, расходы и услугу перед сохранением. Было: ' + previousDecoration
           : 'Новое нанесение рассчитано. Было: ' + previousDecoration) : (canKeepExistingDecoration
           ? 'Не удалось восстановить исходное нанесение. Оставьте его без изменений или удалите и добавьте заново: ' + previousDecoration
           : 'Измените нанесение: ' + previousDecoration))
@@ -2129,7 +2128,9 @@ function editQuoteCell(cell) {
         setActiveModule('souvenir');
         return;
       }
-      if (pendingDecorationEditIndex !== null && pendingDecorationRestoreUnavailable) {
+      if (pendingDecorationEditIndex !== null
+        && pendingDecorationRestoreUnavailable
+        && !LegacyBridge.canAddDecoration()) {
         closeDecorationDialog();
         return;
       }
