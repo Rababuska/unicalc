@@ -1270,6 +1270,16 @@ function addRunValues(row, runItems, field, getValue, className) {
       rowActions.className = 'quote-row-actions';
       const actionToolbar = document.createElement('div');
       actionToolbar.className = 'quote-action-toolbar';
+      const moveUpButton = createQuoteActionButton('Переместить позицию выше', '<path d="m6 14 6-6 6 6"/>');
+      moveUpButton.dataset.movePositionId = item.id;
+      moveUpButton.dataset.movePositionDirection = '-1';
+      moveUpButton.disabled = index === 0;
+      actionToolbar.appendChild(moveUpButton);
+      const moveDownButton = createQuoteActionButton('Переместить позицию ниже', '<path d="m6 10 6 6 6-6"/>');
+      moveDownButton.dataset.movePositionId = item.id;
+      moveDownButton.dataset.movePositionDirection = '1';
+      moveDownButton.disabled = index === runGroups.length - 1;
+      actionToolbar.appendChild(moveDownButton);
       const decorationButton = createQuoteActionButton('Добавить нанесение', '<path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"/><path d="m19 14 1.2 3.2L23 18l-2.8.8L19 22l-1.2-3.2L15 18l2.8-.8L19 14z"/>', 'add-decoration');
       decorationButton.dataset.calcDecorationId = item.id;
       actionToolbar.appendChild(decorationButton);
@@ -1776,11 +1786,18 @@ function editQuoteCell(cell) {
     if (cell && kpBody.contains(cell)) editQuoteCell(cell);
   }
 
+  function moveQuotePosition(itemId, direction) {
+    const nextItems = OrderFinance.moveGroup(OrderState.getItems(), itemId, direction);
+    if (nextItems) OrderState.setItems(nextItems);
+  }
+
   function handleQuoteAction(button) {
     if (!button || button.dataset.actionHandled === 'true') return;
     button.dataset.actionHandled = 'true';
     flushFocusedQuoteCell();
-    if (button.dataset.editInternalAdjustmentId) {
+    if (button.dataset.movePositionId) {
+      moveQuotePosition(button.dataset.movePositionId, Number(button.dataset.movePositionDirection));
+    } else if (button.dataset.editInternalAdjustmentId) {
       const adjustmentId = button.dataset.editInternalAdjustmentId;
       const targetGroupId = button.dataset.editInternalAdjustmentTarget || '';
       if (button.dataset.editInternalAdjustmentType === 'cashback') openCashbackDialog(targetGroupId, adjustmentId);
@@ -2174,13 +2191,13 @@ function editQuoteCell(cell) {
     updateCalculationStatus();
   });
   kpBody.addEventListener('pointerdown', function (event) {
-    const button = event.target.closest('[data-remove-position-id], [data-remove-quote-adjustment-id], [data-remove-internal-adjustment-id], [data-edit-internal-adjustment-id], [data-edit-overtime-line-id], [data-add-overtime-target], [data-add-cashback-target], [data-edit-decoration-id], [data-edit-stock-decoration-id], [data-remove-stock-decoration-id], [data-calc-decoration-id], [data-remove-annotation-id], [data-remove-photo-id], [data-remove-decoration-group-id], [data-open-duplicate-form-id], [data-confirm-duplicate-item-id], [data-edit-item-id], [data-remove-id]');
+    const button = event.target.closest('[data-move-position-id], [data-remove-position-id], [data-remove-quote-adjustment-id], [data-remove-internal-adjustment-id], [data-edit-internal-adjustment-id], [data-edit-overtime-line-id], [data-add-overtime-target], [data-add-cashback-target], [data-edit-decoration-id], [data-edit-stock-decoration-id], [data-remove-stock-decoration-id], [data-calc-decoration-id], [data-remove-annotation-id], [data-remove-photo-id], [data-remove-decoration-group-id], [data-open-duplicate-form-id], [data-confirm-duplicate-item-id], [data-edit-item-id], [data-remove-id]');
     if (!button) return;
     event.preventDefault();
     handleQuoteAction(button);
   });
   kpBody.addEventListener('click', function (event) {
-    const button = event.target.closest('[data-remove-position-id], [data-remove-quote-adjustment-id], [data-remove-internal-adjustment-id], [data-edit-internal-adjustment-id], [data-edit-overtime-line-id], [data-add-overtime-target], [data-add-cashback-target], [data-edit-decoration-id], [data-edit-stock-decoration-id], [data-remove-stock-decoration-id], [data-calc-decoration-id], [data-remove-annotation-id], [data-remove-photo-id], [data-remove-decoration-group-id], [data-open-duplicate-form-id], [data-confirm-duplicate-item-id], [data-edit-item-id], [data-remove-id]');
+    const button = event.target.closest('[data-move-position-id], [data-remove-position-id], [data-remove-quote-adjustment-id], [data-remove-internal-adjustment-id], [data-edit-internal-adjustment-id], [data-edit-overtime-line-id], [data-add-overtime-target], [data-add-cashback-target], [data-edit-decoration-id], [data-edit-stock-decoration-id], [data-remove-stock-decoration-id], [data-calc-decoration-id], [data-remove-annotation-id], [data-remove-photo-id], [data-remove-decoration-group-id], [data-open-duplicate-form-id], [data-confirm-duplicate-item-id], [data-edit-item-id], [data-remove-id]');
     if (!button) return;
     if (button.dataset.actionHandled === 'true') {
       delete button.dataset.actionHandled;
@@ -2190,7 +2207,7 @@ function editQuoteCell(cell) {
   });
   kpBody.addEventListener('keydown', function (event) {
     if (event.key !== 'Enter' && event.key !== ' ') return;
-    const button = event.target.closest('[data-remove-position-id], [data-remove-quote-adjustment-id], [data-remove-internal-adjustment-id], [data-edit-internal-adjustment-id], [data-edit-overtime-line-id], [data-add-overtime-target], [data-add-cashback-target], [data-edit-decoration-id], [data-edit-stock-decoration-id], [data-remove-stock-decoration-id], [data-calc-decoration-id], [data-remove-annotation-id], [data-remove-photo-id], [data-remove-decoration-group-id], [data-open-duplicate-form-id], [data-confirm-duplicate-item-id], [data-edit-item-id], [data-remove-id]');
+    const button = event.target.closest('[data-move-position-id], [data-remove-position-id], [data-remove-quote-adjustment-id], [data-remove-internal-adjustment-id], [data-edit-internal-adjustment-id], [data-edit-overtime-line-id], [data-add-overtime-target], [data-add-cashback-target], [data-edit-decoration-id], [data-edit-stock-decoration-id], [data-remove-stock-decoration-id], [data-calc-decoration-id], [data-remove-annotation-id], [data-remove-photo-id], [data-remove-decoration-group-id], [data-open-duplicate-form-id], [data-confirm-duplicate-item-id], [data-edit-item-id], [data-remove-id]');
     if (!button) return;
     event.preventDefault();
     handleQuoteAction(button);

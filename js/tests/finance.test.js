@@ -148,6 +148,21 @@ test('keeps business cards and leaflets separate when legacy run groups collide'
   assert.deepEqual(window.OrderFinance.itemsForVat(items, true, settings).map(function (item) { return item.total; }), [900, 1620, 2000]);
 });
 
+test('moves complete quote position groups without changing their runs', () => {
+  const items = [
+    { id: 'box', quantity: 1 },
+    { id: 'field-run-1', runGroupId: 'field', quantity: 10 },
+    { id: 'field-run-2', runGroupId: 'field', quantity: 20 },
+    { id: 'bag', quantity: 1 }
+  ];
+
+  const movedItems = window.OrderFinance.moveGroup(items, 'field-run-1', -1);
+
+  assert.deepEqual(movedItems.map(function (item) { return item.id; }), ['field-run-1', 'field-run-2', 'box', 'bag']);
+  assert.deepEqual(items.map(function (item) { return item.id; }), ['box', 'field-run-1', 'field-run-2', 'bag']);
+  assert.equal(window.OrderFinance.moveGroup(items, 'box', -1), null);
+});
+
 test('allows manual total override and hidden total flag', () => {
   const items = [
     { quantity: 2, unitPrice: 200, total: 400, productionCost: 300 }

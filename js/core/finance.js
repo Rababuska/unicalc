@@ -243,6 +243,22 @@
     return Array.from(groups.values());
   }
 
+  function moveGroup(items, itemId, direction) {
+    if (!Array.isArray(items) || (direction !== -1 && direction !== 1)) return null;
+    const item = items.find(function (entry) { return String(entry.id) === String(itemId); });
+    if (!item) return null;
+    const groups = groupRuns(items);
+    const groupIndex = groups.findIndex(function (group) {
+      return runGroupKey(group[0]) === runGroupKey(item);
+    });
+    const targetIndex = groupIndex + direction;
+    if (groupIndex < 0 || targetIndex < 0 || targetIndex >= groups.length) return null;
+    groups.splice(targetIndex, 0, groups.splice(groupIndex, 1)[0]);
+    return groups.reduce(function (orderedItems, group) {
+      return orderedItems.concat(group);
+    }, []);
+  }
+
   function formatAmount(amount) {
     return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(amount);
   }
@@ -257,6 +273,7 @@
     runGroupKey: runGroupKey,
     itemExpenses: itemExpenses,
     groupRuns: groupRuns,
+    moveGroup: moveGroup,
     calculate: function (itemsOrOrder, includeVat, settingsOrOptions) {
       const isOrderObj = itemsOrOrder && !Array.isArray(itemsOrOrder) && Array.isArray(itemsOrOrder.items);
       const items = isOrderObj ? itemsOrOrder.items : (Array.isArray(itemsOrOrder) ? itemsOrOrder : []);
