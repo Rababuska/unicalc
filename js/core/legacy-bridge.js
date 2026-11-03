@@ -4,6 +4,12 @@
   const observers = {};
   const listeners = new Set();
 
+  window.addEventListener('message', function (event) {
+    const frame = frames.poly;
+    if (!frame || event.source !== frame.contentWindow || !event.data || event.data.type !== 'GOOGLE_SAVE_RESULT') return;
+    window.dispatchEvent(new CustomEvent('history:google-save-result', { detail: event.data }));
+  });
+
   function notify() {
     listeners.forEach(function (listener) { listener(); });
   }
@@ -99,7 +105,7 @@
       const frame = document.createElement('iframe');
       frame.className = 'legacy-frame';
       frame.title = moduleName === 'poly' ? 'Полиграфический калькулятор' : 'Сувенирный калькулятор';
-      frame.src = moduleName === 'poly' ? '_legacy/poly/index.html' : '_legacy/souvenir/index.html';
+      frame.src = moduleName === 'poly' ? '_legacy/poly/index.html?v=2' : '_legacy/souvenir/index.html';
       frames[moduleName] = frame;
       frame.addEventListener('load', function () {
         try {
@@ -488,16 +494,10 @@
       frameWin.postMessage({ type: 'SAVE_TO_GOOGLE', payload: payload }, '*');
       return true;
     }
-    if (!app.googleScriptUrl || typeof window.fetch !== 'function') return false;
-    window.fetch(app.googleScriptUrl, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'save', record: payload })
-    }).catch(function (error) {
-      console.error('Ошибка отправки КП в Google:', error);
-    });
-    return true;
+    window.dispatchEvent(new CustomEvent('history:google-save-result', {
+      detail: { success: false, id: payload.id, message: 'Не удалось подключиться к калькулятору для отправки КП в Google.' }
+    }));
+    return false;
   }
 
   function syncPolyQuote(items, companyName, includeVat) {

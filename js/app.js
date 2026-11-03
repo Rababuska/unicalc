@@ -2373,14 +2373,14 @@ function editQuoteCell(cell) {
     });
   document.getElementById('btn-save-history').addEventListener('click', function () {
     const saved = saveCurrentHistory();
-    document.getElementById('quote-export-status').textContent = saved ? savedStatusText('КП сохранено в истории.') : 'Нет позиций для сохранения.';
+    document.getElementById('quote-export-status').textContent = saved ? savedStatusText('Отправляю КП в Google и проверяю позиции и фото…') : 'Нет позиций для сохранения.';
   });
   document.getElementById('btn-save-history-new').addEventListener('click', function () {
     if (!OrderState.getItems().length) return;
     currentHistoryId = null;
     currentHistoryManagerId = null;
     const saved = saveCurrentHistory();
-    document.getElementById('quote-export-status').textContent = saved ? savedStatusText('Сохранено как новое КП. Прежняя версия не изменена.') : 'Нет позиций для сохранения.';
+    document.getElementById('quote-export-status').textContent = saved ? savedStatusText('Отправляю КП в Google и проверяю позиции и фото…') : 'Нет позиций для сохранения.';
   });
   document.getElementById('btn-copy-word').addEventListener('click', function () {
     saveCurrentHistory();
@@ -2610,6 +2610,12 @@ function editQuoteCell(cell) {
     if (quotaWarned) return;
     quotaWarned = true;
     alert('Память браузера переполнена: не удалось сохранить данные КП. Освободите место в хранилище сайта.');
+  });
+  window.addEventListener('history:google-save-result', function (event) {
+    const result = event.detail || {};
+    document.getElementById('quote-export-status').textContent = result.success
+      ? 'Google подтвердил сохранение КП: ' + result.itemCount + ' позиций, фото: ' + result.photoCount + '. ' + (result.message || '')
+      : 'Не удалось сохранить КП в Google: ' + (result.message || 'сервер не подтвердил запись.');
   });
 
   OrderState.subscribe(renderQuote);

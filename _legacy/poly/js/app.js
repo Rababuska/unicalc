@@ -8,6 +8,232 @@ document.addEventListener('keydown', function(e) {
     if (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 74 || e.keyCode === 67)) { e.preventDefault(); return false; }
 });
 
+function stableGoogleValue(value) {
+    if (Array.isArray(value)) return value.map(stableGoogleValue);
+    if (!value || typeof value !== 'object') return value;
+    return Object.keys(value).sort().reduce(function(result, key) {
+        if (key !== 'photoRefs' && key !== 'photoCacheKey' && key !== 'photo' && key !== 'photos') {
+            result[key] = stableGoogleValue(value[key]);
+        }
+        return result;
+    }, {});
+}
+
+function googleItemPhotos(item) {
+    if (Array.isArray(item.photos)) return item.photos;
+    return item.photo ? [item.photo] : [];
+}
+
+function canonicalizeGooglePhotos(item) {
+    var photos = googleItemPhotos(item);
+    delete item.photos;
+    delete item.photo;
+    delete item.photoCacheKey;
+    delete item.photoRefs;
+    if (photos.length === 1) item.photo = photos[0];
+    else if (photos.length > 1) {
+        item.photos = photos;
+        item.photo = photos[0];
+    }
+    return photos;
+}
+
+function resizeGooglePhoto(source, maxSide, quality) {
+    return new Promise(function(resolve, reject) {
+        if (typeof source !== 'string' || !/^data:image\//i.test(source)) {
+            reject(new Error('В КП обнаружено фото в неподдерживаемом формате.'));
+            return;
+        }
+        var image = new Image();
+        image.onload = function() {
+            try {
+                var scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+                var canvas = document.createElement('canvas');
+                canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+                canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+                var context = canvas.getContext('2d');
+                context.fillStyle = '#fff';
+                context.fillRect(0, 0, canvas.width, canvas.height);
+                context.drawImage(image, 0, 0, canvas.width, canvas.height);
+                var compressed = canvas.toDataURL('image/jpeg', quality);
+                resolve(compressed.length < source.length ? compressed : source);
+            } catch (error) {
+                reject(error);
+            }
+        };
+        image.onerror = function() { reject(new Error('Не удалось подготовить фото для сохранения в Google.')); };
+        image.src = source;
+    });
+}
+
+function prepareGoogleRecord(record) {
+    var prepared = JSON.parse(JSON.stringify(record));
+    prepared.items = prepared.items.map(function(item) {
+        var copy = Object.assign({}, item);
+        var photos = canonicalizeGooglePhotos(copy);
+        copy.__googlePhotos = photos;
+        return copy;
+    });
+    var photoCount = prepared.items.reduce(function(total, item) { return total + item.__googlePhotos.length; }, 0);
+
+    function cleanItems() {
+        return prepared.items.map(function(item) {
+            var clean = Object.assign({}, item);
+            delete clean.__googlePhotos;
+            return clean;
+        });
+    }
+
+    function serializedLength() {
+        return JSON.stringify(cleanItems()).length;
+    }
+
+    if (!photoCount) {
+        prepared.items = cleanItems();
+        return Promise.resolve(prepared);
+    }
+
+    var textOnlyLength = JSON.stringify(prepared.items.map(function(item) {
+        var copy = Object.assign({}, item);
+        delete copy.photo;
+        delete copy.photos;
+        delete copy.__googlePhotos;
+        return copy;
+    })).length;
+    var cellBudget = 45000;
+    if (textOnlyLength >= cellBudget) {
+        return Promise.reject(new Error('Данные позиций без фото превышают лимит Google Sheets. Укоротите описание КП и повторите сохранение.'));
+    }
+
+    var photoSources = prepared.items.map(function(item) { return item.__googlePhotos; });
+    var compressionSteps = [
+        { maxSide: 640, quality: 0.76 },
+        { maxSide: 480, quality: 0.68 },
+        { maxSide: 360, quality: 0.60 },
+        { maxSide: 280, quality: 0.52 },
+        { maxSide: 220, quality: 0.45 },
+        { maxSide: 180, quality: 0.38 },
+        { maxSide: 140, quality: 0.32 },
+        { maxSide: 110, quality: 0.28 }
+    ];
+
+    function compressAt(stepIndex) {
+        if (serializedLength() <= cellBudget) {
+            prepared.items = cleanItems();
+            return Promise.resolve(prepared);
+        }
+        if (stepIndex >= compressionSteps.length) {
+            return Promise.reject(new Error('Не удалось уменьшить фото до размера, который Google Sheets принимает. КП не отправлено.'));
+        }
+        var step = compressionSteps[stepIndex];
+        var tasks = [];
+        photoSources.forEach(function(photos, itemIndex) {
+            photos.forEach(function(source, photoIndex) {
+                tasks.push(resizeGooglePhoto(source, step.maxSide, step.quality).then(function(compressed) {
+                    photoSources[itemIndex][photoIndex] = compressed;
+                }));
+            });
+        });
+        return Promise.all(tasks).then(function() {
+            prepared.items.forEach(function(item, index) {
+                delete item.photo;
+                delete item.photos;
+                var photos = photoSources[index];
+                if (photos.length === 1) item.photo = photos[0];
+                else if (photos.length > 1) {
+                    item.photos = photos;
+                    item.photo = photos[0];
+                }
+                item.__googlePhotos = photos;
+            });
+            return compressAt(stepIndex + 1);
+        });
+    }
+
+    return compressAt(0);
+}
+
+function matchesGoogleRecord(expected, actual) {
+    if (String(expected.id) !== String(actual.id)
+        || String(expected.managerId) !== String(actual.managerId)
+        || String(expected.managerName || '') !== String(actual.managerName || '')
+        || String(expected.date || '') !== String(actual.date || '')
+        || String(expected.company || '') !== String(actual.company || '')
+        || String(expected.summary || '') !== String(actual.summary || '')
+        || Number(expected.total) !== Number(actual.total)
+        || (expected.includeVat !== false) !== (actual.includeVat !== false)
+        || !Array.isArray(expected.items) || !Array.isArray(actual.items)
+        || expected.items.length !== actual.items.length) return false;
+    return expected.items.every(function(item, index) {
+        var saved = actual.items[index];
+        if (JSON.stringify(stableGoogleValue(item)) !== JSON.stringify(stableGoogleValue(saved))) return false;
+        var expectedPhotos = googleItemPhotos(item);
+        var actualPhotos = googleItemPhotos(saved);
+        return expectedPhotos.length === actualPhotos.length
+            && expectedPhotos.every(function(photo, photoIndex) { return photo === actualPhotos[photoIndex]; });
+    });
+}
+
+function verifyGoogleRecord(instance, record, attempt) {
+    var verifyUrl = instance.googleScriptUrl + '?managerId=' + encodeURIComponent(record.managerId)
+        + '&_=' + Date.now();
+    return fetch(verifyUrl, { credentials: 'omit', cache: 'no-store' })
+        .then(function(response) {
+            if (!response.ok) throw new Error('Google вернул HTTP ' + response.status);
+            return response.json();
+        })
+        .then(function(result) {
+            if (!result || result.status !== 'ok' || !Array.isArray(result.data)) {
+                throw new Error(result && result.message || 'Некорректный ответ Google');
+            }
+            var saved = result.data.find(function(item) { return String(item.id) === String(record.id); });
+            if (saved && matchesGoogleRecord(record, saved)) return saved;
+            if (attempt >= 3) throw new Error('Google не подтвердил сохранение всех позиций и фото. Проверьте Apps Script.');
+            return new Promise(function(resolve) { setTimeout(resolve, 500 * Math.pow(2, attempt)); })
+                .then(function() { return verifyGoogleRecord(instance, record, attempt + 1); });
+        });
+}
+
+function sendGoogleRecord(instance, record, notifyParent) {
+    if (!instance.googleScriptUrl || !instance.currentManager || !instance.currentManager.id) {
+        return Promise.reject(new Error('Нет подключения к Google или не выполнен вход менеджера'));
+    }
+    return prepareGoogleRecord(record).then(function(googleRecord) {
+        return fetch(instance.googleScriptUrl, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({ action: 'save', record: googleRecord })
+        }).then(function() {
+            return verifyGoogleRecord(instance, googleRecord, 0);
+        }).then(function() {
+            return googleRecord;
+        });
+    }).then(function() {
+        if (notifyParent && window.parent !== window) {
+            window.parent.postMessage({
+                type: 'GOOGLE_SAVE_RESULT',
+                success: true,
+                id: record.id,
+                itemCount: record.items.length,
+                photoCount: record.items.reduce(function(total, item) { return total + googleItemPhotos(item).length; }, 0),
+                message: 'Фото подготовлены так, чтобы сохранить всё КП в прежнем формате Google Sheets.'
+            }, '*');
+        }
+    }).catch(function(error) {
+        console.error('Ошибка сохранения КП в Google:', error);
+        if (notifyParent && window.parent !== window) {
+            window.parent.postMessage({
+                type: 'GOOGLE_SAVE_RESULT',
+                success: false,
+                id: record.id,
+                message: error && error.message ? error.message : 'Google не подтвердил сохранение КП'
+            }, '*');
+        }
+        throw error;
+    });
+}
+
 var app = new Vue({
     el: '#app',
     data: {
@@ -594,7 +820,29 @@ var app = new Vue({
         },
         saveUserHistory: function() {
             if (!this.currentManager.id) return;
-            localStorage.setItem('poly_history_' + this.currentManager.id, JSON.stringify(this.userHistory));
+            var storageKey = 'poly_history_' + this.currentManager.id;
+            try {
+                localStorage.setItem(storageKey, JSON.stringify(this.userHistory));
+                return true;
+            } catch (error) {
+                var compactHistory = this.userHistory.map(function(record) {
+                    var compactRecord = Object.assign({}, record);
+                    compactRecord.items = (record.items || []).map(function(item) {
+                        var compactItem = Object.assign({}, item);
+                        delete compactItem.photo;
+                        delete compactItem.photos;
+                        return compactItem;
+                    });
+                    return compactRecord;
+                });
+                try {
+                    localStorage.setItem(storageKey, JSON.stringify(compactHistory));
+                    return false;
+                } catch (fallbackError) {
+                    console.warn('Локальный кеш истории переполнен; сохранение в Google продолжается.', fallbackError);
+                    return false;
+                }
+            }
         },
         syncWithGoogleSheets: function() {
             if (!this.googleScriptUrl || !this.currentManager.id) return;
@@ -880,17 +1128,13 @@ var app = new Vue({
 
             if (this.googleScriptUrl && this.googleScriptUrl.indexOf('http') === 0) {
                 this.isSyncing = true;
-                fetch(this.googleScriptUrl, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify({ action: 'save', record: record })
-                })
+                sendGoogleRecord(this, record, false)
                 .then(() => {
                     this.showNotification('КП сохранено в истории и отправлено в Google!');
                 })
-                .catch(function(err) {
+                .catch((err) => {
                     console.error('Ошибка сохранения в Google:', err);
+                    this.showNotification('Не удалось сохранить КП в Google: ' + (err && err.message ? err.message : 'сервер не подтвердил запись'));
                 })
                 .finally(() => {
                     this.isSyncing = false;
@@ -985,7 +1229,7 @@ var app = new Vue({
                         method: 'POST',
                         mode: 'no-cors',
                         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                        body: JSON.stringify({ action: 'delete', id: id })
+                        body: JSON.stringify({ action: 'delete', id: id, managerId: this.currentManager.id })
                     }).finally(() => { this.isSyncing = false; });
                 }
                 this.showNotification('Запись удалена');
@@ -1198,18 +1442,8 @@ window.addEventListener('message', function(event) {
         managerName: payload.managerName || app.currentManager.name
     });
     app.isSyncing = true;
-    fetch(app.googleScriptUrl, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: 'save', record: record })
-    })
-    .then(function() {
-        app.showNotification('КП сохранено в истории и отправлено в Google!');
-    })
-    .catch(function(error) {
-        console.error('Ошибка сохранения в Google:', error);
-    })
+    sendGoogleRecord(app, record, true)
+    .catch(function() {})
     .finally(function() {
         app.isSyncing = false;
     });
