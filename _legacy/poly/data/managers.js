@@ -20,14 +20,6 @@ const APP_MANAGERS = [
         email: 'aziz@vto.kz'
     },
     { 
-        id: 'm_nadezhda', 
-        name: 'Надежда Загорская', 
-        token: 433201,
-        phone: '+7 707 11 99 422',
-        internal: '+7 (727) 357-22-77 вн. 1001',
-        email: 'ny@vto.kz'
-    },
-    { 
         id: 'm_sergey', 
         name: 'Сергей Скурыдин', 
         token: 601612,
