@@ -114,7 +114,7 @@ function fetchPage(targetUrl) {
   // Jina Reader в режиме html отдаёт ту же страницу со своей сети, куда каталоги пускают.
   return firstValid([
     pageAttempt('direct', targetUrl, 0, 6000, null, targetUrl),
-    pageAttempt('jina', 'https://r.jina.ai/' + targetUrl, 2000, 20000, { 'X-Return-Format': 'html' }, targetUrl)
+    pageAttempt('jina', 'https://r.jina.ai/' + targetUrl, 2000, 20000, { 'X-Respond-With': 'html' }, targetUrl)
   ]);
 }
 
