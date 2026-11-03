@@ -809,13 +809,16 @@ async function fetchSouvenirResource(url, errorMessage) {
       : '';
     const editingPoly = !decorationMode && activeModule === 'poly' && LegacyBridge.isPolyEditing();
     const ready = decorationMode
-      ? activeModule === 'souvenir' && LegacyBridge.canAdd('souvenir')
+      ? activeModule === 'souvenir' && LegacyBridge.canAddDecoration()
       : LegacyBridge.canAdd(activeModule);
     const canKeepExistingDecoration = Boolean(editingAnnotation && pendingDecorationRestoreUnavailable && !ready);
+    const mustKeepUnrestoredAnnotation = Boolean(editingAnnotation && pendingDecorationRestoreUnavailable);
     addToKpButton.disabled = (!ready && !canKeepExistingDecoration) || (editingStockDecoration && pendingDecorationRestoreUnavailable);
     addToKpButton.textContent = decorationMode
       ? (activeModule === 'souvenir'
-        ? (canKeepExistingDecoration ? 'Оставить без изменений' : (editingAnnotation || editingStockDecoration ? 'Сохранить изменения' : (pendingItem.category === 'souvenir' ? 'Добавить в КП' : 'Добавить нанесение в позицию')))
+        ? (mustKeepUnrestoredAnnotation || canKeepExistingDecoration
+          ? 'Оставить без изменений'
+          : (editingAnnotation || editingStockDecoration ? 'Сохранить изменения' : (pendingItem.category === 'souvenir' ? 'Добавить в КП' : 'Добавить нанесение в позицию')))
         : 'Продолжить расчет нанесения')
       : (editingPoly ? 'Сохранить изменения' : '+ Добавить в КП');
     document.getElementById('btn-cancel-decoration').classList.toggle('hidden', !decorationMode);
@@ -826,9 +829,9 @@ async function fetchSouvenirResource(url, errorMessage) {
           : (ready ? 'Нанесение рассчитано. Сохраните изменения.' : 'Выберите услугу и выполните расчет нанесения'))
         : (editingAnnotation
         ? (ready ? (pendingDecorationRestoreUnavailable
-          ? 'Не все параметры нанесения восстановлены. Проверьте метод, размеры, цену и курс перед сохранением. Было: ' + previousDecoration
+          ? 'В сохраненном КП нет исходных параметров нанесения. Изменения нельзя безопасно пересчитать; оставьте исходное КП без изменений. Чтобы пересчитать, удалите старое нанесение и добавьте его заново. Было: ' + previousDecoration
           : 'Новое нанесение рассчитано. Было: ' + previousDecoration) : (canKeepExistingDecoration
-          ? 'Не удалось восстановить исходное нанесение полностью. Оставьте его без изменений или выберите услугу и проверьте параметры: ' + previousDecoration
+          ? 'Не удалось восстановить исходное нанесение. Оставьте его без изменений или удалите и добавьте заново: ' + previousDecoration
           : 'Измените нанесение: ' + previousDecoration))
         : (ready ? 'Расчет готов для: ' + pendingItem.title : 'Выберите услугу и выполните расчет нанесения')))
       : (editingPoly
@@ -1892,7 +1895,9 @@ function editQuoteCell(cell) {
       const annotation = currentItem && currentItem.annotations && currentItem.annotations[pendingDecorationEditIndex];
       if (!annotation) return;
       const services = Array.isArray(annotation.services) ? annotation.services : [];
-      let servicesRestored = services.length > 0 && LegacyBridge.setSouvenirServices(services, annotation.serviceOptions);
+      let servicesRestored = services.length > 0
+        && Array.isArray(annotation.serviceOptions)
+        && LegacyBridge.setSouvenirServices(services, annotation.serviceOptions);
       if (!services.length) LegacyBridge.setSouvenirServices([]);
       const calculationRestored = LegacyBridge.setSouvenirCalculation(annotation, currentItem);
       pendingDecorationRestoreUnavailable = !servicesRestored || !calculationRestored;
@@ -2031,6 +2036,12 @@ function editQuoteCell(cell) {
       details: serviceDetails,
       annotationText: line,
       services: Array.isArray(decoration.services) ? decoration.services.slice() : [],
+      calculationOptions: decoration.calculationOptions ? {
+        inputs: Object.assign({}, decoration.calculationOptions.inputs || {}),
+        vat: decoration.calculationOptions.vat,
+        showUsd: decoration.calculationOptions.showUsd,
+        usdRate: decoration.calculationOptions.usdRate
+      } : null,
       serviceOptions: Array.isArray(decoration.serviceOptions) ? decoration.serviceOptions.map(function (options) {
         return Object.assign({}, options, {
           dtfPoints: Array.isArray(options.dtfPoints) ? options.dtfPoints.map(function (point) {
@@ -2118,8 +2129,12 @@ function editQuoteCell(cell) {
         setActiveModule('souvenir');
         return;
       }
-      if (pendingDecorationEditIndex !== null && pendingDecorationRestoreUnavailable && !LegacyBridge.canAdd('souvenir')) {
+      if (pendingDecorationEditIndex !== null && pendingDecorationRestoreUnavailable) {
         closeDecorationDialog();
+        return;
+      }
+      if (!LegacyBridge.canAddDecoration()) {
+        updateCalculationStatus();
         return;
       }
       const decoration = LegacyBridge.add('souvenir');

@@ -46,6 +46,45 @@
     });
   }
 
+  function souvenirCalculationOptions(context) {
+    const inputNames = ['C6', 'F3', 'F4', 'F4_simp', 'F5', 'F6', 'F7', 'markup', 'addDiscount', 'K1', 'K3'];
+    const inputs = {};
+    inputNames.forEach(function (name) {
+      const field = visibleField(context.doc, 'input[name="' + name + '"]');
+      if (field) inputs[name] = field.value;
+    });
+    const vatField = Array.from(context.doc.querySelectorAll('input[name="vat"]')).find(function (field) {
+      return field.checked && isVisible(field, context.doc);
+    });
+    const usdRate = visibleField(context.doc, 'input[name="usdRate"]');
+    const showUsd = context.doc.getElementById('showUsd');
+    return {
+      inputs: inputs,
+      vat: vatField ? vatField.value : 'withVAT',
+      showUsd: Boolean(showUsd && showUsd.checked),
+      usdRate: usdRate ? usdRate.value : '480'
+    };
+  }
+
+  function restoreSouvenirCalculationOptions(context, options) {
+    if (!options || !options.inputs || typeof options.inputs !== 'object') return false;
+    Object.keys(options.inputs).forEach(function (name) {
+      const field = visibleField(context.doc, 'input[name="' + name + '"]');
+      if (field) field.value = options.inputs[name];
+    });
+    if (options.vat) {
+      const vatField = Array.from(context.doc.querySelectorAll('input[name="vat"]')).find(function (field) {
+        return field.value === options.vat && isVisible(field, context.doc);
+      });
+      if (vatField) vatField.checked = true;
+    }
+    const showUsd = context.doc.getElementById('showUsd');
+    if (showUsd && options.showUsd !== undefined) showUsd.checked = Boolean(options.showUsd);
+    const usdRate = visibleField(context.doc, 'input[name="usdRate"]');
+    if (usdRate && options.usdRate !== undefined) usdRate.value = options.usdRate;
+    return true;
+  }
+
   function frameWindow(moduleName) {
     const frame = frames[moduleName];
     return frame && frame.contentWindow ? frame.contentWindow : null;
@@ -162,7 +201,7 @@
     const serviceNames = serviceSlots.map(function (slot) { return slot.service.name; }).filter(Boolean);
     const productSelect = visibleField(doc, 'select[name="product"]');
     const canAddProduct = mode === 'propaket' && product && total > 0;
-    const canAddService = mode !== 'propaket' && total > 0 && (serviceNames.length > 0 || (mode === 'sklad' && productSelect && productSelect.value));
+    const canAddService = mode !== 'propaket' && total > 0 && (serviceNames.length > 0 || mode === 'order' || (mode === 'sklad' && productSelect && productSelect.value));
     return {
       win: win,
       doc: doc,
@@ -185,6 +224,13 @@
 
   function canAdd(moduleName) {
     return moduleName === 'poly' ? polyCanAdd() : Boolean(souvenirContext() && souvenirContext().canAdd);
+  }
+
+  function canAddDecoration() {
+    const context = souvenirContext();
+    if (!context || !context.canAdd) return false;
+    if (context.mode === 'order') return context.serviceSlots.length > 0;
+    return true;
   }
 
   function getDecorationDetails(context) {
@@ -326,6 +372,7 @@
       details: [details, notebookEmbossText].filter(Boolean).join('\n'),
       annotationText: decorationDetails,
       services: contextAfterCalc.serviceNames.slice(),
+      calculationOptions: souvenirCalculationOptions(contextAfterCalc),
       serviceOptions: contextAfterCalc.serviceSlots.map(function (slot) {
         return {
           name: slot.service.name,
@@ -416,9 +463,12 @@
       if (originField) originField.checked = true;
     }
 
+    const calculationOptionsRestored = restoreSouvenirCalculationOptions(context, annotation.calculationOptions);
     if (typeof context.win.calc === 'function') context.win.calc();
     notify();
-    return targetMode === 'sklad' ? stockProductRestored : hasSourceValues;
+    return targetMode === 'sklad'
+      ? stockProductRestored && calculationOptionsRestored
+      : hasSourceValues && calculationOptionsRestored;
   }
 
   function setSouvenirServices(serviceNames, serviceOptions) {
@@ -460,7 +510,10 @@
         search.value = name;
         search.dispatchEvent(new win.Event('input', { bubbles: true }));
         const result = Array.from(element.querySelectorAll('.slot-results .search-item')).find(function (item) {
-          return String(item.textContent || '').split('\n')[0].trim() === name;
+          const label = item.firstChild && item.firstChild.textContent
+            ? item.firstChild.textContent.trim()
+            : '';
+          return label === name;
         });
         if (!result) {
           restored = false;
@@ -652,6 +705,7 @@
   window.LegacyBridge = {
     load: load,
     canAdd: canAdd,
+    canAddDecoration: canAddDecoration,
     add: function (moduleName) {
       if (!canAdd(moduleName)) return null;
       return moduleName === 'poly' ? addPolyItem() : addSouvenirItem();

@@ -34,12 +34,28 @@ function createBridge() {
   const fields = {
     C3: createField('100'),
     C5: createField('10'),
+    C6: createField('0'),
     C8: createField('250'),
     C9: createField('2500'),
+    F3: createField('0'),
+    F4: createField('15000'),
+    F4_simp: createField('0'),
+    F5: createField('0'),
+    F6: createField('0'),
+    F7: createField('0'),
+    markup: createField('1.35'),
+    addDiscount: createField('0'),
+    K1: createField('0'),
+    K3: createField('0'),
     PB2: createField('6'),
     F9: createField('1800')
   };
   const origin = createField('kazakhstan', true, 'origin');
+  const russia = createField('russia', false, 'origin');
+  const vatWith = createField('withVAT', true, 'vat');
+  const vatWithout = createField('withoutVAT', false, 'vat');
+  const showUsd = createField('');
+  const usdRate = createField('480');
   const addButton = { style: {} };
   const frameWindow = {
     currentMode: 'order',
@@ -65,7 +81,8 @@ function createBridge() {
     const clicheW = createField('50');
     const clicheH = createField('50');
     const result = {
-      textContent: serviceCatalog[0].name,
+      textContent: serviceCatalog[0].name + 'расход: 22 562,5 теңге (с НДС)',
+      firstChild: { textContent: serviceCatalog[0].name },
       click: function () { state.service = serviceCatalog[0]; }
     };
     const points = { querySelectorAll: function () { return []; } };
@@ -95,6 +112,9 @@ function createBridge() {
     head: { appendChild: function () {} },
     getElementById: function (id) {
       if (id === 'btn-add-kp') return addButton;
+      if (id === 'kazakhstan') return origin;
+      if (id === 'russia') return russia;
+      if (id === 'showUsd') return showUsd;
       return null;
     },
     createElement: function () { return { style: {} }; },
@@ -102,6 +122,8 @@ function createBridge() {
       const fieldMatch = /^input\[name="(.+)"\]$/.exec(selector);
       if (fieldMatch && fields[fieldMatch[1]]) return [fields[fieldMatch[1]]];
       if (selector === 'input[name="origin"]') return [origin];
+      if (selector === 'input[name="vat"]') return [vatWith, vatWithout];
+      if (selector === 'input[name="usdRate"]') return [usdRate];
       if (selector === 'select[name="product"]') return [];
       if (selector === '.service-slot') return serviceElements;
       return [];
@@ -128,7 +150,12 @@ function createBridge() {
   );
   return {
     bridge: window.LegacyBridge,
-    frameWindow: frameWindow
+    frameWindow: frameWindow,
+    frameDocument: frameDocument,
+    fields: fields,
+    vatFields: [vatWith, vatWithout],
+    showUsd: showUsd,
+    usdRate: usdRate
   };
 }
 
@@ -156,8 +183,8 @@ test('requires a selected order service and stores its details with the quote it
   const setup = createBridge();
   await setup.bridge.load('souvenir');
 
-  assert.equal(setup.bridge.canAdd('souvenir'), false);
-  assert.equal(setup.bridge.add('souvenir'), null);
+  assert.equal(setup.bridge.canAdd('souvenir'), true);
+  assert.equal(setup.bridge.canAddDecoration(), false);
 
   setup.frameWindow.servicesList = [{
     uid: 1,
@@ -170,9 +197,58 @@ test('requires a selected order service and stores its details with the quote it
   }];
 
   assert.equal(setup.bridge.canAdd('souvenir'), true);
+  assert.equal(setup.bridge.canAddDecoration(), true);
   const item = setup.bridge.add('souvenir');
   assert.deepEqual(Array.from(item.services), ['Тампопечать: ручки']);
   assert.equal(item.annotationText, 'Нанесение логотипа методом тампопечати');
   assert.equal(item.title, 'Нанесение логотипа');
   assert.equal(item.serviceOptions[0].name, 'Тампопечать: ручки');
+  assert.equal(item.calculationOptions.inputs.F4, '15000');
+  assert.equal(item.calculationOptions.vat, 'withVAT');
+});
+
+test('restores souvenir expenses and calculation settings when editing a saved annotation', async () => {
+  const setup = createBridge();
+  await setup.bridge.load('souvenir');
+  setup.frameWindow.servicesList = [{
+    uid: 1,
+    service: { name: 'Тиснение: Блокноты / Ежедневники', isCliche: true },
+    withDelivery: true,
+    clicheExists: false,
+    clicheW: 65,
+    clicheH: 41,
+    dtfPoints: []
+  }];
+  const annotation = {
+    souvenirMode: 'order',
+    quantity: 40,
+    sourceUnitPrice: 370,
+    exchangeRate: 6,
+    currencyOrigin: 'russia',
+    services: ['Тиснение: Блокноты / Ежедневники'],
+    serviceOptions: [{
+      name: 'Тиснение: Блокноты / Ежедневники',
+      withDelivery: true,
+      clicheExists: false,
+      clicheW: 65,
+      clicheH: 41,
+      dtfPoints: []
+    }],
+    calculationOptions: {
+      inputs: { F4: '15000', markup: '1.5', addDiscount: '3', C6: '2' },
+      vat: 'withoutVAT',
+      showUsd: true,
+      usdRate: '490'
+    }
+  };
+  assert.equal(setup.bridge.setSouvenirServices(annotation.services, annotation.serviceOptions), true);
+
+  assert.equal(setup.bridge.setSouvenirCalculation(annotation, {}), true);
+  assert.equal(setup.fields.F4.value, '15000');
+  assert.equal(setup.fields.markup.value, '1.5');
+  assert.equal(setup.fields.addDiscount.value, '3');
+  assert.equal(setup.fields.C6.value, '2');
+  assert.equal(setup.vatFields[1].checked, true);
+  assert.equal(setup.showUsd.checked, true);
+  assert.equal(setup.usdRate.value, '490');
 });
