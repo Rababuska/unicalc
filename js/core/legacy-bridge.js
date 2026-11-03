@@ -453,7 +453,6 @@
     const items = (Array.isArray(record.items) ? record.items : []).map(function (item) {
       const copy = Object.assign({}, item);
       delete copy.__meta;
-      delete copy.photo;
       return copy;
     });
     if (!items.length) items.push({ __placeholder: true, title: 'Пустой черновик' });

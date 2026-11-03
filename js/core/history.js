@@ -36,6 +36,18 @@
     return leftClient === rightClient && Number.isFinite(leftTotal) && Number.isFinite(rightTotal) && leftTotal === rightTotal;
   }
 
+  function preserveLocalPhotos(existingItems, incomingItems) {
+    return incomingItems.map(function (incoming, index) {
+      const existing = existingItems[index];
+      if (!existing || String(existing.title || '') !== String(incoming.title || '')
+        || String(existing.details || existing.desc || '') !== String(incoming.details || incoming.desc || '')) return incoming;
+      const incomingPhotos = Array.isArray(incoming.photos) ? incoming.photos : (incoming.photo ? [incoming.photo] : []);
+      if (incomingPhotos.length) return incoming;
+      const photos = Array.isArray(existing.photos) ? existing.photos : (existing.photo ? [existing.photo] : []);
+      return photos.length ? Object.assign({}, incoming, { photos: photos, photo: photos[0] }) : incoming;
+    });
+  }
+
   function readRecords() {
     try {
       const records = JSON.parse(localStorage.getItem(storageKey) || '[]');
@@ -117,6 +129,7 @@
           records.push(incoming);
           return;
         }
+        incoming.items = preserveLocalPhotos(records[index].items || [], incoming.items);
         const incomingTimestamp = recordTimestamp(incoming);
         const currentTimestamp = recordTimestamp(records[index]);
         if (incomingTimestamp !== null && (currentTimestamp === null || incomingTimestamp >= currentTimestamp)) {
