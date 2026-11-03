@@ -32,6 +32,28 @@ test('applies order-level percent discount without touching production cost', ()
   assert.ok(Math.abs(result.margin - 470.2) < 1e-9);
 });
 
+test('uses tax-inclusive production cost for poly quote rows and totals', () => {
+  const items = [
+    {
+      id: 'poly-with-categories',
+      category: 'poly',
+      productionCost: 7150,
+      productionCostWithTax: 9724,
+      productionCostByCategory: { poly: 7150 }
+    },
+    {
+      id: 'poly-without-categories',
+      category: 'poly',
+      productionCost: 1000,
+      productionCostWithTax: 1160
+    }
+  ];
+
+  assert.equal(window.OrderFinance.itemExpenses(items[0]).poly, 9724);
+  assert.equal(window.OrderFinance.itemExpenses(items[1]).poly, 1160);
+  assert.equal(window.OrderFinance.calculate(items, true).productionCost, 10884);
+});
+
 test('shows whole-quote discounts in every row and keeps row sum equal to quote total', () => {
   const items = [
     { id: 'first', quantity: 10, unitPrice: 100, total: 1000 },

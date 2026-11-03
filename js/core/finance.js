@@ -151,14 +151,20 @@
   function itemExpenses(item) {
     const expenses = { poly: 0, souvenir: 0, other: 0, overtime: 0, cashback: 0 };
     const extraProductionCost = metadataExtraProductionCost(item);
+    const rawPolyCost = Number(item.productionCost) || 0;
+    const productionCostWithTax = Number(item.productionCostWithTax);
+    const polyCost = Number.isFinite(productionCostWithTax) && productionCostWithTax > 0
+      ? productionCostWithTax
+      : rawPolyCost;
     if (item.productionCostByCategory && typeof item.productionCostByCategory === 'object') {
       Object.keys(item.productionCostByCategory).forEach(function (category) {
         const bucket = category === 'poly' || category === 'souvenir' ? category : 'other';
-        expenses[bucket] += Number(item.productionCostByCategory[category]) || 0;
+        const categoryCost = category === 'poly' ? polyCost : Number(item.productionCostByCategory[category]) || 0;
+        expenses[bucket] += categoryCost;
       });
     } else {
       const bucket = item.category === 'poly' || item.category === 'souvenir' ? item.category : 'other';
-      expenses[bucket] += Number(item.productionCost) || 0;
+      expenses[bucket] += bucket === 'poly' ? polyCost : rawPolyCost;
     }
     if (extraProductionCost > 0) {
       expenses.other += extraProductionCost;
