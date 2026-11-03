@@ -37,6 +37,15 @@
     return Number.isFinite(number) ? number : 0;
   }
 
+  function souvenirServiceSlots(win) {
+    if (Array.isArray(win.servicesList)) {
+      return win.servicesList.filter(function (slot) { return slot && slot.service; });
+    }
+    return [win.activeService, win.activeService2].filter(Boolean).map(function (service, index) {
+      return { uid: index + 1, service: service };
+    });
+  }
+
   function frameWindow(moduleName) {
     const frame = frames[moduleName];
     return frame && frame.contentWindow ? frame.contentWindow : null;
@@ -149,10 +158,11 @@
       return field.checked && isVisible(field, doc);
     });
     const product = win.selectedProduct;
-    const serviceNames = [win.activeService && win.activeService.name, win.activeService2 && win.activeService2.name].filter(Boolean);
+    const serviceSlots = souvenirServiceSlots(win);
+    const serviceNames = serviceSlots.map(function (slot) { return slot.service.name; }).filter(Boolean);
     const productSelect = visibleField(doc, 'select[name="product"]');
     const canAddProduct = mode === 'propaket' && product && total > 0;
-    const canAddService = mode !== 'propaket' && total > 0 && (serviceNames.length > 0 || mode === 'order' || (mode === 'sklad' && productSelect && productSelect.value));
+    const canAddService = mode !== 'propaket' && total > 0 && (serviceNames.length > 0 || (mode === 'sklad' && productSelect && productSelect.value));
     return {
       win: win,
       doc: doc,
@@ -166,6 +176,7 @@
       souvenirMode: mode,
       stockProductValue: mode === 'sklad' && productSelect ? productSelect.value : '',
       product: product,
+      serviceSlots: serviceSlots,
       serviceNames: serviceNames,
       productSelect: productSelect,
       canAdd: Boolean(canAddProduct || canAddService)
@@ -177,8 +188,8 @@
   }
 
   function getDecorationDetails(context) {
-    const services = [context.win.activeService, context.win.activeService2].filter(Boolean);
-    return services.map(function (service, index) {
+    return context.serviceSlots.map(function (slot, index) {
+      const service = slot.service;
       const name = String(service.name || '').toLowerCase();
       let method = String(service.name || '').split(':')[0].trim();
       if (service.isDtfArea || /дтф|dtf/.test(name)) method = 'ДТФ';
@@ -191,18 +202,25 @@
 
       let details = 'Нанесение логотипа методом ' + method;
       if (service.isDtfArea) {
-        const points = Array.from(context.doc.querySelectorAll(index === 1 ? '.dtf-point2' : '.dtf-point'))
-          .map(function (point) {
+        const points = Array.isArray(slot.dtfPoints) && slot.dtfPoints.length
+          ? slot.dtfPoints.map(function (point) {
+            const width = Number(point.w) || 0;
+            const height = Number(point.h) || 0;
+            return width > 0 && height > 0 ? width + ' x ' + height + ' мм' : '';
+          }).filter(Boolean)
+          : Array.from(context.doc.querySelectorAll(index === 1 ? '.dtf-point2' : '.dtf-point')).map(function (point) {
             const width = Number(point.querySelector(index === 1 ? '.dtf-w2' : '.dtf-w')?.value) || 0;
             const height = Number(point.querySelector(index === 1 ? '.dtf-h2' : '.dtf-h')?.value) || 0;
             return width > 0 && height > 0 ? width + ' x ' + height + ' мм' : '';
           }).filter(Boolean);
         if (points.length) details += ' (размеры: ' + points.join(', ') + ')';
       } else if (service.isCliche) {
-        const suffix = index === 1 ? '2' : '';
-        const width = Number(context.doc.getElementById('clicheW' + suffix)?.value) || 0;
-        const height = Number(context.doc.getElementById('clicheH' + suffix)?.value) || 0;
-        if (width > 0 && height > 0) details += ' (клише ' + width + ' x ' + height + ' мм)';
+        const clicheExists = slot.clicheExists !== undefined
+          ? slot.clicheExists
+          : Boolean(context.doc.getElementById(index === 1 ? 'clicheExists2' : 'clicheExists')?.checked);
+        const width = Number(slot.clicheW) || Number(context.doc.getElementById(index === 1 ? 'clicheW2' : 'clicheW')?.value) || 0;
+        const height = Number(slot.clicheH) || Number(context.doc.getElementById(index === 1 ? 'clicheH2' : 'clicheH')?.value) || 0;
+        if (!clicheExists && width > 0 && height > 0) details += ' (клише ' + width + ' x ' + height + ' мм)';
       }
       return details;
     }).join('\n');
@@ -286,7 +304,7 @@
     const stockProductName = contextAfterCalc.mode === 'sklad' && productName
       ? productName.charAt(0).toLocaleUpperCase('ru-RU') + productName.slice(1)
       : productName;
-    const hasSelectedServices = Boolean(win.activeService || win.activeService2);
+    const hasSelectedServices = contextAfterCalc.serviceSlots.length > 0;
     const decorationDetails = hasSelectedServices ? getDecorationDetails(contextAfterCalc) : '';
     const title = contextAfterCalc.mode === 'sklad' && productName
       ? stockProductName
@@ -296,7 +314,9 @@
       : decorationDetails;
     const delivery = typeof win.getDeliveryDays === 'function' ? win.getDeliveryDays(contextAfterCalc.quantity) : '';
     const costField = visibleField(contextAfterCalc.doc, 'input[name="F9"]');
-    const isNotebookEmboss = Boolean(win.activeService && win.activeService.isCliche && /блокн|ежеднев/i.test(String(productName || '') + ' ' + String(decorationDetails || '')))
+    const isNotebookEmboss = Boolean(contextAfterCalc.serviceSlots.some(function (slot) {
+      return slot.service.isCliche;
+    }) && /блокн|ежеднев/i.test(String(productName || '') + ' ' + String(decorationDetails || '')))
       || /блокн|ежеднев/i.test(String(productName || '') + ' ' + String(decorationDetails || ''));
     const notebookEmbossText = isNotebookEmboss ? 'Тиснение обложки блокнота: приладка + удар/тираж + клише по размеру' : '';
 
@@ -306,6 +326,18 @@
       details: [details, notebookEmbossText].filter(Boolean).join('\n'),
       annotationText: decorationDetails,
       services: contextAfterCalc.serviceNames.slice(),
+      serviceOptions: contextAfterCalc.serviceSlots.map(function (slot) {
+        return {
+          name: slot.service.name,
+          withDelivery: slot.withDelivery !== false,
+          clicheExists: Boolean(slot.clicheExists),
+          clicheW: Number(slot.clicheW) || 0,
+          clicheH: Number(slot.clicheH) || 0,
+          dtfPoints: Array.isArray(slot.dtfPoints) ? slot.dtfPoints.map(function (point) {
+            return { w: Number(point.w) || 0, h: Number(point.h) || 0 };
+          }) : []
+        };
+      }),
       quantity: contextAfterCalc.quantity,
       unitPrice: contextAfterCalc.unitPrice,
       total: contextAfterCalc.total,
@@ -320,9 +352,9 @@
       productionCostIncludesFinish: hasSelectedServices,
       delivery: delivery,
       embossing: isNotebookEmboss ? 'notebook' : undefined,
-      clicheExists: Boolean(win.activeService && win.activeService.isCliche && contextAfterCalc.doc.getElementById('clicheExists') && contextAfterCalc.doc.getElementById('clicheExists').checked),
-      clicheW: Number(contextAfterCalc.doc.getElementById('clicheW')?.value) || 0,
-      clicheH: Number(contextAfterCalc.doc.getElementById('clicheH')?.value) || 0
+      clicheExists: contextAfterCalc.serviceSlots.some(function (slot) { return slot.service.isCliche && slot.clicheExists; }),
+      clicheW: Number(contextAfterCalc.serviceSlots.find(function (slot) { return slot.service.isCliche; })?.clicheW) || 0,
+      clicheH: Number(contextAfterCalc.serviceSlots.find(function (slot) { return slot.service.isCliche; })?.clicheH) || 0
     };
   }
 
@@ -389,12 +421,105 @@
     return targetMode === 'sklad' ? stockProductRestored : hasSourceValues;
   }
 
-  function setSouvenirServices(serviceNames) {
+  function setSouvenirServices(serviceNames, serviceOptions) {
     const context = souvenirContext();
     if (!context) return false;
     const names = Array.isArray(serviceNames) ? serviceNames.filter(Boolean) : [];
     const win = context.win;
     const doc = context.doc;
+
+    if (Array.isArray(win.servicesList) && typeof win.createServiceSlot === 'function') {
+      function getSlotElements() {
+        return Array.from(doc.querySelectorAll('.service-slot'));
+      }
+
+      getSlotElements().forEach(function (element) {
+        const state = win.servicesList.find(function (slot) {
+          return slot.uid === Number(element.dataset.uid);
+        });
+        if (state && state.service) {
+          const clearButton = element.querySelector('.slot-clear');
+          if (clearButton) clearButton.click();
+        }
+      });
+
+      while (getSlotElements().length < names.length) win.createServiceSlot();
+
+      let restored = true;
+      names.forEach(function (name, index) {
+        const element = getSlotElements()[index];
+        if (!element) {
+          restored = false;
+          return;
+        }
+        const search = element.querySelector('.slot-search');
+        if (!search) {
+          restored = false;
+          return;
+        }
+        search.value = name;
+        search.dispatchEvent(new win.Event('input', { bubbles: true }));
+        const result = Array.from(element.querySelectorAll('.slot-results .search-item')).find(function (item) {
+          return String(item.textContent || '').split('\n')[0].trim() === name;
+        });
+        if (!result) {
+          restored = false;
+          return;
+        }
+        result.click();
+
+        const state = win.servicesList.find(function (slot) {
+          return slot.uid === Number(element.dataset.uid);
+        });
+        const options = Array.isArray(serviceOptions) ? serviceOptions[index] : null;
+        if (!state || !options) return;
+
+        if (options.withDelivery !== undefined) {
+          state.withDelivery = Boolean(options.withDelivery);
+          const delivery = element.querySelector('.slot-add-delivery');
+          if (delivery) delivery.checked = state.withDelivery;
+        }
+        state.clicheExists = Boolean(options.clicheExists);
+        state.clicheW = Number(options.clicheW) || state.clicheW;
+        state.clicheH = Number(options.clicheH) || state.clicheH;
+        const clicheExists = element.querySelector('.slot-cliche-exists');
+        const clicheW = element.querySelector('.slot-cliche-w');
+        const clicheH = element.querySelector('.slot-cliche-h');
+        if (clicheExists) clicheExists.checked = state.clicheExists;
+        if (clicheW) clicheW.value = String(state.clicheW);
+        if (clicheH) clicheH.value = String(state.clicheH);
+
+        if (Array.isArray(options.dtfPoints) && options.dtfPoints.length) {
+          const pointsContainer = element.querySelector('.slot-dtf-points');
+          const addPoint = element.querySelector('.slot-add-dtf-point');
+          let pointElements = pointsContainer ? Array.from(pointsContainer.querySelectorAll('.dtf-point')) : [];
+          while (pointElements.length < options.dtfPoints.length && addPoint) {
+            addPoint.click();
+            pointElements = Array.from(pointsContainer.querySelectorAll('.dtf-point'));
+          }
+          while (pointElements.length > options.dtfPoints.length) {
+            const removePoint = pointElements[pointElements.length - 1].querySelector('.remove-dtf-point');
+            if (!removePoint) break;
+            removePoint.click();
+            pointElements = Array.from(pointsContainer.querySelectorAll('.dtf-point'));
+          }
+          state.dtfPoints = options.dtfPoints.map(function (point) {
+            return { w: Number(point.w) || 0, h: Number(point.h) || 0 };
+          });
+          pointElements.forEach(function (pointElement, pointIndex) {
+            const point = state.dtfPoints[pointIndex];
+            if (!point) return;
+            const width = pointElement.querySelector('.dtf-w');
+            const height = pointElement.querySelector('.dtf-h');
+            if (width) width.value = String(point.w);
+            if (height) height.value = String(point.h);
+          });
+        }
+      });
+      if (typeof win.calc === 'function') win.calc();
+      notify();
+      return restored;
+    }
 
     if (win.activeService) doc.getElementById('clearService')?.click();
     if (win.activeService2) doc.getElementById('clearService2')?.click();

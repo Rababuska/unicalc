@@ -805,7 +805,7 @@ async function fetchSouvenirResource(url, errorMessage) {
     const annotations = pendingItem && Array.isArray(pendingItem.annotations) ? pendingItem.annotations : [];
     const editingAnnotation = pendingDecorationEditIndex !== null ? annotations[pendingDecorationEditIndex] : null;
     const previousDecoration = editingAnnotation
-      ? ((editingAnnotation.services || []).join(' + ') || plainText(editingAnnotation.details || editingAnnotation.annotationText) || 'без описания')
+      ? ((editingAnnotation.services || []).join(' + ') || plainText(editingAnnotation.details || editingAnnotation.annotationText) || 'описание не сохранено')
       : '';
     const editingPoly = !decorationMode && activeModule === 'poly' && LegacyBridge.isPolyEditing();
     const ready = decorationMode
@@ -826,9 +826,9 @@ async function fetchSouvenirResource(url, errorMessage) {
           : (ready ? 'Нанесение рассчитано. Сохраните изменения.' : 'Выберите услугу и выполните расчет нанесения'))
         : (editingAnnotation
         ? (ready ? (pendingDecorationRestoreUnavailable
-          ? 'Сумма пересчитана. Исходные цена и курс не сохранены; проверьте цену и курс перед сохранением. Было: ' + previousDecoration
+          ? 'Не все параметры нанесения восстановлены. Проверьте метод, размеры, цену и курс перед сохранением. Было: ' + previousDecoration
           : 'Новое нанесение рассчитано. Было: ' + previousDecoration) : (canKeepExistingDecoration
-          ? 'Исходные цена и курс не сохранены. Тираж восстановлен, валюта ₽ выбрана; введите цену и проверьте курс или оставьте нанесение без изменений: ' + previousDecoration
+          ? 'Не удалось восстановить исходное нанесение полностью. Оставьте его без изменений или выберите услугу и проверьте параметры: ' + previousDecoration
           : 'Измените нанесение: ' + previousDecoration))
         : (ready ? 'Расчет готов для: ' + pendingItem.title : 'Выберите услугу и выполните расчет нанесения')))
       : (editingPoly
@@ -1892,21 +1892,24 @@ function editQuoteCell(cell) {
       const annotation = currentItem && currentItem.annotations && currentItem.annotations[pendingDecorationEditIndex];
       if (!annotation) return;
       const services = Array.isArray(annotation.services) ? annotation.services : [];
-      const servicesRestored = services.length > 0 && LegacyBridge.setSouvenirServices(services);
+      let servicesRestored = services.length > 0 && LegacyBridge.setSouvenirServices(services, annotation.serviceOptions);
       if (!services.length) LegacyBridge.setSouvenirServices([]);
       const calculationRestored = LegacyBridge.setSouvenirCalculation(annotation, currentItem);
-      pendingDecorationRestoreUnavailable = !servicesRestored && !calculationRestored;
+      pendingDecorationRestoreUnavailable = !servicesRestored || !calculationRestored;
       updateCalculationStatus();
-      if (!calculationRestored) {
+      if (!calculationRestored || (services.length && !servicesRestored)) {
         const requestedEditIndex = pendingDecorationEditIndex;
         let attemptsRemaining = 15;
         const retryCalculationRestore = function () {
           if (String(pendingDecorationItemId) !== String(currentItem.id) || pendingDecorationEditIndex !== requestedEditIndex) return;
+          if (services.length) servicesRestored = LegacyBridge.setSouvenirServices(services, annotation.serviceOptions);
           const retryRestored = LegacyBridge.setSouvenirCalculation(annotation, currentItem);
-          pendingDecorationRestoreUnavailable = !servicesRestored && !retryRestored;
+          pendingDecorationRestoreUnavailable = !servicesRestored || !retryRestored;
           updateCalculationStatus();
           attemptsRemaining -= 1;
-          if (!retryRestored && attemptsRemaining > 0) window.setTimeout(retryCalculationRestore, 100);
+          if ((!retryRestored || (services.length && !servicesRestored)) && attemptsRemaining > 0) {
+            window.setTimeout(retryCalculationRestore, 100);
+          }
         };
         window.setTimeout(retryCalculationRestore, 100);
       }
@@ -2028,6 +2031,13 @@ function editQuoteCell(cell) {
       details: serviceDetails,
       annotationText: line,
       services: Array.isArray(decoration.services) ? decoration.services.slice() : [],
+      serviceOptions: Array.isArray(decoration.serviceOptions) ? decoration.serviceOptions.map(function (options) {
+        return Object.assign({}, options, {
+          dtfPoints: Array.isArray(options.dtfPoints) ? options.dtfPoints.map(function (point) {
+            return { w: Number(point.w) || 0, h: Number(point.h) || 0 };
+          }) : []
+        });
+      }) : [],
       souvenirMode: decoration.souvenirMode,
       stockProductValue: decoration.stockProductValue,
       quantity: decoration.quantity,
