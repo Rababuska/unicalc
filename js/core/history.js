@@ -48,6 +48,41 @@
     });
   }
 
+  const listeners = new Set();
+
+  function reportPhotoStorageError(error) {
+    console.error('Не удалось сохранить фото истории:', error);
+    window.dispatchEvent(new CustomEvent('storage:photo-cache-failed', { detail: { key: storageKey, message: error && error.message } }));
+  }
+
+  function historyPhotoKey(record, item, index) {
+    return item.photoCacheKey || 'history:' + record.id + ':' + (item.id === undefined ? index : item.id);
+  }
+
+  function restoreStoredPhotos() {
+    const pending = [];
+    records.forEach(function (record, recordIndex) {
+      if (!Array.isArray(record.items)) return;
+      record.items.forEach(function (item, itemIndex) {
+        if (!item.photoCacheKey || item.photo || (Array.isArray(item.photos) && item.photos.length)) return;
+        pending.push(window.PhotoStorage.load(item.photoCacheKey).then(function (photos) {
+          if (!Array.isArray(photos) || !photos.length) return false;
+          const current = records[recordIndex] && records[recordIndex].items && records[recordIndex].items[itemIndex];
+          if (!current || current.photo || (Array.isArray(current.photos) && current.photos.length)) return false;
+          current.photos = photos;
+          current.photo = photos[0];
+          return true;
+        }).catch(function (error) {
+          reportPhotoStorageError(error);
+          return false;
+        }));
+      });
+    });
+    Promise.all(pending).then(function (restored) {
+      if (restored.some(Boolean)) listeners.forEach(function (listener) { listener(); });
+    });
+  }
+
   function readRecords() {
     try {
       const records = JSON.parse(localStorage.getItem(storageKey) || '[]');
@@ -58,28 +93,38 @@
   }
 
   let records = readRecords();
+  restoreStoredPhotos();
 
   function persist() {
     try {
       localStorage.setItem(storageKey, JSON.stringify(records));
     } catch (error) {
+      const fallbackRecords = records.map(function (record) {
+        const items = Array.isArray(record.items) ? record.items.map(function (item, index) {
+          const photos = Array.isArray(item.photos) ? item.photos : (item.photo ? [item.photo] : []);
+          if (!photos.length) return item;
+          const photoCacheKey = historyPhotoKey(record, item, index);
+          if (!window.PhotoStorage) reportPhotoStorageError(new Error('Модуль хранения фото не загружен'));
+          else window.PhotoStorage.save(photoCacheKey, photos).catch(reportPhotoStorageError);
+          return Object.assign({}, item, { photos: [], photo: null, photoCacheKey: photoCacheKey });
+        }) : record.items;
+        return Object.assign({}, record, { items: items });
+      });
       try {
-        localStorage.setItem(storageKey, JSON.stringify(records.map(function (record) {
-          return Object.assign({}, record, {
-            items: Array.isArray(record.items)
-              ? record.items.map(function (item) { return Object.assign({}, item, { photos: [], photo: null }); })
-              : record.items
-          });
-        })));
+        localStorage.setItem(storageKey, JSON.stringify(fallbackRecords));
       } catch (fallbackError) {
         // The in-memory history remains available when browser storage is unavailable.
+        window.dispatchEvent(new CustomEvent('storage:quota-exceeded', { detail: { key: storageKey } }));
       }
-      window.dispatchEvent(new CustomEvent('storage:quota-exceeded', { detail: { key: storageKey } }));
     }
   }
 
   window.OrderHistory = {
     getRecords: function () { return clone(records); },
+    subscribe: function (listener) {
+      listeners.add(listener);
+      return function () { listeners.delete(listener); };
+    },
     save: function (record) {
       const saved = Object.assign({}, clone(record), {
         id: record.id || (window.crypto && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random()),

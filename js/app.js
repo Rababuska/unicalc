@@ -2601,13 +2601,19 @@ function editQuoteCell(cell) {
   }
   compactStoredPhotos().catch(function () {});
   let quotaWarned = false;
+  window.addEventListener('storage:photo-cache-failed', function () {
+    if (quotaWarned) return;
+    quotaWarned = true;
+    alert('Не удалось сохранить фото в отдельном хранилище браузера. Проверьте свободное место и поддержку IndexedDB; фото в Google не затронуты.');
+  });
   window.addEventListener('storage:quota-exceeded', function () {
     if (quotaWarned) return;
     quotaWarned = true;
-    alert('Память браузера переполнена: фото не сохраняются между перезагрузками. Правки текста сохранены. Удалите старые КП из истории или уменьшите число фото.');
+    alert('Память браузера переполнена: не удалось сохранить данные КП. Освободите место в хранилище сайта.');
   });
 
   OrderState.subscribe(renderQuote);
+  OrderHistory.subscribe(renderHistory);
   LegacyBridge.subscribe(function () {
     updateCalculationStatus();
     renderHistory();

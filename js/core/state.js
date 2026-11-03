@@ -13,6 +13,42 @@
 
   let items = readItems().map(normalize);
 
+  function reportPhotoStorageError(key, error) {
+    console.error('Не удалось сохранить фото:', error);
+    window.dispatchEvent(new CustomEvent('storage:photo-cache-failed', { detail: { key: key, message: error && error.message } }));
+  }
+
+  function cachePhotos(key, photos) {
+    if (!window.PhotoStorage) {
+      reportPhotoStorageError(storageKey, new Error('Модуль хранения фото не загружен'));
+      return;
+    }
+    window.PhotoStorage.save(key, photos).catch(function (error) {
+      reportPhotoStorageError(storageKey, error);
+    });
+  }
+
+  function restoreStoredPhotos() {
+    const pending = items.map(function (item, index) {
+      if (!item.photoCacheKey || item.photos.length) return Promise.resolve(false);
+      return window.PhotoStorage.load(item.photoCacheKey).then(function (photos) {
+        if (!Array.isArray(photos) || !photos.length) return false;
+        const current = items[index];
+        if (!current || String(current.id) !== String(item.id) || current.photos.length) return false;
+        items[index] = Object.assign({}, current, { photos: photos, photo: photos[0] });
+        return true;
+      }).catch(function (error) {
+        reportPhotoStorageError(storageKey, error);
+        return false;
+      });
+    });
+    Promise.all(pending).then(function (restored) {
+      if (restored.some(Boolean)) publish(false);
+    });
+  }
+
+  restoreStoredPhotos();
+
   function firstDefined(item, keys, fallback) {
     for (let index = 0; index < keys.length; index++) {
       if (item[keys[index]] !== undefined && item[keys[index]] !== null) return item[keys[index]];
@@ -72,20 +108,25 @@
     });
   }
 
-  function publish() {
+  function publish(persistChanges) {
     const currentItems = snapshot();
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(currentItems));
-    } catch (error) {
-      // Квота localStorage исчерпана (фото в base64): сохраняем без фото, чтобы не потерять правки.
+    if (persistChanges !== false) {
       try {
-        localStorage.setItem(storageKey, JSON.stringify(currentItems.map(function (item) {
-          return Object.assign({}, item, { photos: [], photo: null });
-        })));
-      } catch (fallbackError) {
-        // The in-memory order remains usable when browser storage is unavailable.
+        localStorage.setItem(storageKey, JSON.stringify(currentItems));
+      } catch (error) {
+        const fallbackItems = currentItems.map(function (item) {
+          const photos = Array.isArray(item.photos) ? item.photos : [];
+          if (!photos.length) return item;
+          const photoCacheKey = item.photoCacheKey || 'order:' + item.id;
+          cachePhotos(photoCacheKey, photos);
+          return Object.assign({}, item, { photos: [], photo: null, photoCacheKey: photoCacheKey });
+        });
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(fallbackItems));
+        } catch (fallbackError) {
+          window.dispatchEvent(new CustomEvent('storage:quota-exceeded', { detail: { key: storageKey } }));
+        }
       }
-      window.dispatchEvent(new CustomEvent('storage:quota-exceeded', { detail: { key: storageKey } }));
     }
     listeners.forEach(function (listener) {
       listener(currentItems);
@@ -117,8 +158,10 @@
       if (Array.isArray(changes.photos)) {
         updated.photos = changes.photos.slice();
         updated.photo = updated.photos[0] || null;
+        updated.photoCacheKey = updated.photos.length ? (updated.photoCacheKey || 'order:' + updated.id) : null;
       } else if (Object.prototype.hasOwnProperty.call(changes, 'photo')) {
         updated.photos = changes.photo ? [changes.photo] : [];
+        updated.photoCacheKey = updated.photos.length ? (updated.photoCacheKey || 'order:' + updated.id) : null;
       }
       if (changes.total === undefined && (changes.quantity !== undefined || changes.unitPrice !== undefined)) {
         updated.total = (Number(updated.quantity) || 0) * (Number(updated.unitPrice) || 0);
