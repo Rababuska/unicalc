@@ -700,7 +700,7 @@ async function fetchSouvenirResource(url, errorMessage) {
         const timer = setTimeout(function () { controller.abort(); }, 20000);
         try {
           const response = await fetch('https://r.jina.ai/' + pageUrl, {
-            headers: { 'X-Return-Format': 'html' },
+            headers: { 'X-Respond-With': 'html' },
             credentials: 'omit',
             signal: controller.signal
           });
