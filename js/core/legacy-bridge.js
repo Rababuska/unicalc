@@ -37,9 +37,11 @@
     return Number.isFinite(number) ? number : 0;
   }
 
-  function souvenirServiceSlots(win) {
-    if (Array.isArray(win.servicesList)) {
-      return win.servicesList.filter(function (slot) { return slot && slot.service; });
+  function souvenirServiceSlots(win, doc) {
+    if (typeof win.getServiceSlot === 'function') {
+      return Array.from(doc.querySelectorAll('.service-slot')).map(function (element) {
+        return win.getServiceSlot(Number(element.dataset.uid));
+      }).filter(function (slot) { return slot && slot.service; });
     }
     return [win.activeService, win.activeService2].filter(Boolean).map(function (service, index) {
       return { uid: index + 1, service: service };
@@ -80,7 +82,7 @@
     }
     const showUsd = context.doc.getElementById('showUsd');
     if (showUsd && options.showUsd !== undefined) showUsd.checked = Boolean(options.showUsd);
-    const usdRate = visibleField(context.doc, 'input[name="usdRate"]');
+    const usdRate = context.doc.getElementById('usdRate');
     if (usdRate && options.usdRate !== undefined) usdRate.value = options.usdRate;
     return true;
   }
@@ -197,7 +199,7 @@
       return field.checked && isVisible(field, doc);
     });
     const product = win.selectedProduct;
-    const serviceSlots = souvenirServiceSlots(win);
+    const serviceSlots = souvenirServiceSlots(win, doc);
     const serviceNames = serviceSlots.map(function (slot) { return slot.service.name; }).filter(Boolean);
     const productSelect = visibleField(doc, 'select[name="product"]');
     const canAddProduct = mode === 'propaket' && product && total > 0;
@@ -478,15 +480,13 @@
     const win = context.win;
     const doc = context.doc;
 
-    if (Array.isArray(win.servicesList) && typeof win.createServiceSlot === 'function') {
+    if (typeof win.getServiceSlot === 'function' && typeof win.createServiceSlot === 'function') {
       function getSlotElements() {
         return Array.from(doc.querySelectorAll('.service-slot'));
       }
 
       getSlotElements().forEach(function (element) {
-        const state = win.servicesList.find(function (slot) {
-          return slot.uid === Number(element.dataset.uid);
-        });
+        const state = win.getServiceSlot(Number(element.dataset.uid));
         if (state && state.service) {
           const clearButton = element.querySelector('.slot-clear');
           if (clearButton) clearButton.click();
@@ -521,9 +521,7 @@
         }
         result.click();
 
-        const state = win.servicesList.find(function (slot) {
-          return slot.uid === Number(element.dataset.uid);
-        });
+        const state = win.getServiceSlot(Number(element.dataset.uid));
         const options = Array.isArray(serviceOptions) ? serviceOptions[index] : null;
         if (!state || !options) return;
 

@@ -1,5 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
@@ -20,6 +21,7 @@ function createField(value, checked, name) {
 function createBridge() {
   const listeners = {};
   const serviceElements = [];
+  const serviceStates = [];
   const serviceCatalog = [{
     id: 'embossing',
     name: 'Тиснение: Блокноты / Ежедневники',
@@ -56,14 +58,18 @@ function createBridge() {
   const vatWithout = createField('withoutVAT', false, 'vat');
   const showUsd = createField('');
   const usdRate = createField('480');
+  const usdRateWrap = { style: { display: 'none' }, parentElement: null };
+  usdRate.parentElement = usdRateWrap;
   const addButton = { style: {} };
   const frameWindow = {
     currentMode: 'order',
-    servicesList: [],
     addEventListener: function () {},
     calc: function () {},
     getDeliveryDays: function () { return '5-7'; },
     Event: function () {}
+  };
+  frameWindow.getServiceSlot = function (uid) {
+    return serviceStates.find(function (state) { return state.uid === Number(uid); });
   };
   frameWindow.createServiceSlot = function () {
     const state = {
@@ -103,7 +109,7 @@ function createBridge() {
         return [];
       }
     };
-    frameWindow.servicesList.push(state);
+    serviceStates.push(state);
     serviceElements.push(element);
   };
   frameWindow.createServiceSlot();
@@ -115,6 +121,7 @@ function createBridge() {
       if (id === 'kazakhstan') return origin;
       if (id === 'russia') return russia;
       if (id === 'showUsd') return showUsd;
+      if (id === 'usdRate') return usdRate;
       return null;
     },
     createElement: function () { return { style: {} }; },
@@ -162,6 +169,7 @@ function createBridge() {
 test('restores selected souvenir services and their saved options', async () => {
   const setup = createBridge();
   await setup.bridge.load('souvenir');
+  assert.equal(setup.frameWindow.servicesList, undefined);
 
   const name = 'Тиснение: Блокноты / Ежедневники';
   assert.equal(setup.bridge.setSouvenirServices([name], [{
@@ -172,7 +180,7 @@ test('restores selected souvenir services and their saved options', async () => 
     clicheH: 41,
     dtfPoints: []
   }]), true);
-  const restored = setup.frameWindow.servicesList[0];
+  const restored = setup.frameWindow.getServiceSlot(1);
   assert.equal(restored.service.name, name);
   assert.equal(restored.withDelivery, false);
   assert.equal(restored.clicheW, 65);
@@ -186,15 +194,14 @@ test('requires a selected order service and stores its details with the quote it
   assert.equal(setup.bridge.canAdd('souvenir'), true);
   assert.equal(setup.bridge.canAddDecoration(), false);
 
-  setup.frameWindow.servicesList = [{
-    uid: 1,
+  Object.assign(setup.frameWindow.getServiceSlot(1), {
     service: { name: 'Тампопечать: ручки' },
     withDelivery: true,
     clicheExists: false,
     clicheW: 50,
     clicheH: 50,
     dtfPoints: []
-  }];
+  });
 
   assert.equal(setup.bridge.canAdd('souvenir'), true);
   assert.equal(setup.bridge.canAddDecoration(), true);
@@ -210,15 +217,14 @@ test('requires a selected order service and stores its details with the quote it
 test('restores souvenir expenses and calculation settings when editing a saved annotation', async () => {
   const setup = createBridge();
   await setup.bridge.load('souvenir');
-  setup.frameWindow.servicesList = [{
-    uid: 1,
+  Object.assign(setup.frameWindow.getServiceSlot(1), {
     service: { name: 'Тиснение: Блокноты / Ежедневники', isCliche: true },
     withDelivery: true,
     clicheExists: false,
     clicheW: 65,
     clicheH: 41,
     dtfPoints: []
-  }];
+  });
   const annotation = {
     souvenirMode: 'order',
     quantity: 40,
@@ -251,4 +257,15 @@ test('restores souvenir expenses and calculation settings when editing a saved a
   assert.equal(setup.vatFields[1].checked, true);
   assert.equal(setup.showUsd.checked, true);
   assert.equal(setup.usdRate.value, '490');
+});
+
+test('loads the legacy bridge with a cache key matching its current content', () => {
+  const root = path.join(__dirname, '..', '..');
+  const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  const script = html.match(/<script src="js\/core\/legacy-bridge\.js\?v=([a-f0-9]{12})"><\/script>/);
+  assert.ok(script, 'index.html must use the content hash as the legacy bridge cache key');
+
+  const source = fs.readFileSync(path.join(root, 'js', 'core', 'legacy-bridge.js'));
+  const expectedHash = crypto.createHash('sha256').update(source).digest('hex').slice(0, 12);
+  assert.equal(script[1], expectedHash);
 });
