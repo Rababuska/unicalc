@@ -12,11 +12,30 @@ function stableGoogleValue(value) {
     if (Array.isArray(value)) return value.map(stableGoogleValue);
     if (!value || typeof value !== 'object') return value;
     return Object.keys(value).sort().reduce(function(result, key) {
-        if (key !== 'photoRefs' && key !== 'photoCacheKey' && key !== 'photo' && key !== 'photos') {
+        if (key !== '__meta' && key !== 'photoRefs' && key !== 'photoCacheKey' && key !== 'photo' && key !== 'photos') {
             result[key] = stableGoogleValue(value[key]);
         }
         return result;
     }, {});
+}
+
+function comparableGoogleDate(value) {
+    var text = String(value || '');
+    var writtenDate = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(text);
+    if (writtenDate) return writtenDate[3] + '-' + writtenDate[2] + '-' + writtenDate[1];
+    var timestamp = Date.parse(text);
+    if (!Number.isFinite(timestamp)) return text;
+    var parts = new Intl.DateTimeFormat('en', {
+        timeZone: 'Asia/Almaty',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).formatToParts(new Date(timestamp));
+    var dateParts = {};
+    parts.forEach(function(part) {
+        if (part.type !== 'literal') dateParts[part.type] = part.value;
+    });
+    return dateParts.year + '-' + dateParts.month + '-' + dateParts.day;
 }
 
 function googleItemPhotos(item) {
@@ -157,7 +176,7 @@ function matchesGoogleRecord(expected, actual) {
     if (String(expected.id) !== String(actual.id)
         || String(expected.managerId) !== String(actual.managerId)
         || String(expected.managerName || '') !== String(actual.managerName || '')
-        || String(expected.date || '') !== String(actual.date || '')
+        || comparableGoogleDate(expected.date) !== comparableGoogleDate(actual.date)
         || String(expected.company || '') !== String(actual.company || '')
         || String(expected.summary || '') !== String(actual.summary || '')
         || Number(expected.total) !== Number(actual.total)

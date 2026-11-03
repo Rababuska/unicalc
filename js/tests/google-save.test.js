@@ -120,3 +120,23 @@ test('confirms a quote only after the old Google endpoint returns the same saved
   assert.ok(savedRecord.items[0].photo.startsWith('data:image/jpeg;base64,'));
   assert.equal(record.items[0].photo.length, photo.length);
 });
+
+test('accepts Google Sheets date conversion and metadata stored on the first item', () => {
+  const helpers = createGoogleHelpers();
+  const record = {
+    id: '1793623321838',
+    managerId: 'm_igor',
+    managerName: 'Manager',
+    date: '03.11.2026',
+    company: 'Карина',
+    summary: 'Product (1)',
+    total: 1231720,
+    includeVat: true,
+    items: [{ id: 1, title: 'Product', details: 'Details', quantity: 1, photo: 'data:image/jpeg;base64,photo', unitPrice: 1231720 }]
+  };
+  const googleRecord = JSON.parse(JSON.stringify(record));
+  googleRecord.date = '2026-11-02T19:00:00.000Z';
+  googleRecord.items[0].__meta = { includeVat: true, quoteSettings: null, updatedAt: '2026-11-03T06:11:00.000Z' };
+
+  assert.equal(helpers.matchesGoogleRecord(record, googleRecord), true);
+});

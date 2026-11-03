@@ -105,7 +105,7 @@
       const frame = document.createElement('iframe');
       frame.className = 'legacy-frame';
       frame.title = moduleName === 'poly' ? 'Полиграфический калькулятор' : 'Сувенирный калькулятор';
-      frame.src = moduleName === 'poly' ? '_legacy/poly/index.html?v=2' : '_legacy/souvenir/index.html';
+      frame.src = moduleName === 'poly' ? '_legacy/poly/index.html?v=3' : '_legacy/souvenir/index.html';
       frames[moduleName] = frame;
       frame.addEventListener('load', function () {
         try {
