@@ -425,6 +425,7 @@
 var currentMode = 'order'; 
 var serviceUid = 0;
 var servicesList = [];
+window.souvenirServicesReady = false;
 var selectedProduct = null;
 var kpItems = []; 
 
@@ -1228,6 +1229,8 @@ $(document).ready(function() {
 
     $('input, select').on('input change keyup', () => calc());
     calc();
+    window.souvenirServicesReady = true;
+    window.dispatchEvent(new Event('souvenir-services-ready'));
 });
 
 var T = {};

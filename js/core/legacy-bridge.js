@@ -155,14 +155,30 @@
       const frame = document.createElement('iframe');
       frame.className = 'legacy-frame';
       frame.title = moduleName === 'poly' ? 'Полиграфический калькулятор' : 'Сувенирный калькулятор';
-      frame.src = moduleName === 'poly' ? '_legacy/poly/index.html?v=3' : '_legacy/souvenir/index.html';
+      frame.src = moduleName === 'poly' ? '_legacy/poly/index.html?v=3' : '_legacy/souvenir/index.html?v=2';
       frames[moduleName] = frame;
       frame.addEventListener('load', function () {
         try {
           hideLegacyQuote(moduleName, frame);
           bindModuleEvents(moduleName, frame);
-          resolve(frame);
-          notify();
+          if (moduleName !== 'souvenir' || frame.contentWindow.souvenirServicesReady === true) {
+            resolve(frame);
+            notify();
+            return;
+          }
+          const iframeWindow = frame.contentWindow;
+          const readyEvent = 'souvenir-services-ready';
+          const readinessTimeout = window.setTimeout(function () {
+            iframeWindow.removeEventListener(readyEvent, finishSouvenirLoad);
+            reject(new Error('Сувенирный калькулятор не завершил инициализацию'));
+          }, 5000);
+          function finishSouvenirLoad() {
+            window.clearTimeout(readinessTimeout);
+            resolve(frame);
+            notify();
+          }
+          iframeWindow.addEventListener(readyEvent, finishSouvenirLoad, { once: true });
+          if (iframeWindow.souvenirServicesReady === true) finishSouvenirLoad();
         } catch (error) {
           reject(error);
         }
@@ -480,6 +496,8 @@
     const win = context.win;
     const doc = context.doc;
 
+    if (win.souvenirServicesReady === false) return false;
+
     if (typeof win.getServiceSlot === 'function' && typeof win.createServiceSlot === 'function') {
       function getSlotElements() {
         return Array.from(doc.querySelectorAll('.service-slot'));
@@ -572,12 +590,16 @@
       return restored;
     }
 
+    const legacySearch = doc.getElementById('serviceSearch');
+    if (!legacySearch) return false;
+
     if (win.activeService) doc.getElementById('clearService')?.click();
     if (win.activeService2) doc.getElementById('clearService2')?.click();
 
     function selectService(index, name) {
       const suffix = index === 1 ? '2' : '';
       const search = doc.getElementById('serviceSearch' + suffix);
+      if (!search) return false;
       search.value = name;
       search.dispatchEvent(new win.Event('input', { bubbles: true }));
       const result = Array.from(doc.querySelectorAll('#searchResults' + suffix + ' .search-item')).find(function (item) {

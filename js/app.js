@@ -15,6 +15,7 @@
   let pendingDecorationEditIndex = null;
   let pendingStockDecorationEdit = false;
   let pendingDecorationRestoreUnavailable = false;
+  let decorationRestoreGeneration = 0;
   let overtimeTargetGroupId = '';
   let cashbackTargetGroupId = '';
   let overtimeEditingAdjustmentId = '';
@@ -782,6 +783,7 @@ async function fetchSouvenirResource(url, errorMessage) {
   }
 
   function closeDecorationDialog() {
+    decorationRestoreGeneration += 1;
     if (decorationDialog.open) decorationDialog.close();
     LegacyBridge.setDecorationViewOnly(false);
     calcContainer.appendChild(calcActions);
@@ -1879,6 +1881,7 @@ function editQuoteCell(cell) {
   function startDecoration(itemId, annotationIndex) {
     const item = OrderState.getItems().find(function (entry) { return String(entry.id) === String(itemId); });
     if (!item) return;
+    const restoreGeneration = ++decorationRestoreGeneration;
     if (item.souvenirMode === 'sklad' && (!Array.isArray(item.annotations) || item.annotations.length === 0)) {
       startStockDecorationEdit(item.id);
       return;
@@ -1889,6 +1892,9 @@ function editQuoteCell(cell) {
     pendingDecorationRestoreUnavailable = false;
     openDecorationDialog(item.category === 'souvenir');
     setActiveModule('souvenir').then(function () {
+      if (restoreGeneration !== decorationRestoreGeneration
+        || String(pendingDecorationItemId) !== String(item.id)
+        || pendingDecorationEditIndex !== (Number.isInteger(annotationIndex) ? annotationIndex : null)) return;
       if (pendingDecorationEditIndex === null) return;
       const currentItem = OrderState.getItems().find(function (entry) { return String(entry.id) === String(pendingDecorationItemId); });
       const annotation = currentItem && currentItem.annotations && currentItem.annotations[pendingDecorationEditIndex];
@@ -1905,7 +1911,9 @@ function editQuoteCell(cell) {
         const requestedEditIndex = pendingDecorationEditIndex;
         let attemptsRemaining = 15;
         const retryCalculationRestore = function () {
-          if (String(pendingDecorationItemId) !== String(currentItem.id) || pendingDecorationEditIndex !== requestedEditIndex) return;
+          if (restoreGeneration !== decorationRestoreGeneration
+            || String(pendingDecorationItemId) !== String(currentItem.id)
+            || pendingDecorationEditIndex !== requestedEditIndex) return;
           if (services.length) servicesRestored = LegacyBridge.setSouvenirServices(services, annotation.serviceOptions);
           const retryRestored = LegacyBridge.setSouvenirCalculation(annotation, currentItem);
           pendingDecorationRestoreUnavailable = !servicesRestored || !retryRestored;

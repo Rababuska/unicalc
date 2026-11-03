@@ -18,8 +18,9 @@ function createField(value, checked, name) {
   };
 }
 
-function createBridge() {
+function createBridge(servicesReady) {
   const listeners = {};
+  const frameListeners = {};
   const serviceElements = [];
   const serviceStates = [];
   const serviceCatalog = [{
@@ -63,7 +64,17 @@ function createBridge() {
   const addButton = { style: {} };
   const frameWindow = {
     currentMode: 'order',
-    addEventListener: function () {},
+    souvenirServicesReady: servicesReady !== false,
+    addEventListener: function (type, listener) {
+      frameListeners[type] = frameListeners[type] || [];
+      frameListeners[type].push(listener);
+    },
+    removeEventListener: function (type, listener) {
+      frameListeners[type] = (frameListeners[type] || []).filter(function (entry) { return entry !== listener; });
+    },
+    dispatchEvent: function (event) {
+      (frameListeners[event.type] || []).slice().forEach(function (listener) { listener(event); });
+    },
     calc: function () {},
     getDeliveryDays: function () { return '5-7'; },
     Event: function () {}
@@ -148,7 +159,8 @@ function createBridge() {
   const window = {
     addEventListener: function () {},
     dispatchEvent: function () {},
-    setTimeout: setTimeout
+    setTimeout: setTimeout,
+    clearTimeout: clearTimeout
   };
   const context = { window: window, document: document, console: console, setTimeout: setTimeout };
   vm.runInNewContext(
@@ -157,12 +169,14 @@ function createBridge() {
   );
   return {
     bridge: window.LegacyBridge,
+    frame: frame,
     frameWindow: frameWindow,
     frameDocument: frameDocument,
     fields: fields,
     vatFields: [vatWith, vatWithout],
     showUsd: showUsd,
-    usdRate: usdRate
+    usdRate: usdRate,
+    frameWindow: frameWindow
   };
 }
 
@@ -172,19 +186,61 @@ test('restores selected souvenir services and their saved options', async () => 
   assert.equal(setup.frameWindow.servicesList, undefined);
 
   const name = 'Тиснение: Блокноты / Ежедневники';
-  assert.equal(setup.bridge.setSouvenirServices([name], [{
+  const options = {
     name: name,
     withDelivery: false,
     clicheExists: false,
     clicheW: 65,
     clicheH: 41,
     dtfPoints: []
-  }]), true);
+  };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    assert.equal(setup.bridge.setSouvenirServices([name], [options]), true);
+  }
   const restored = setup.frameWindow.getServiceSlot(1);
   assert.equal(restored.service.name, name);
   assert.equal(restored.withDelivery, false);
   assert.equal(restored.clicheW, 65);
   assert.equal(restored.clicheH, 41);
+});
+
+test('does not partially restore souvenir services before the iframe is initialized', async () => {
+  const setup = createBridge();
+  await setup.bridge.load('souvenir');
+  setup.frameWindow.souvenirServicesReady = false;
+
+  assert.equal(setup.bridge.setSouvenirServices(['Тиснение: Блокноты / Ежедневники'], [{
+    name: 'Тиснение: Блокноты / Ежедневники',
+    clicheW: 65,
+    clicheH: 41
+  }]), false);
+  assert.equal(setup.frameDocument.querySelectorAll('.service-slot').length, 1);
+  assert.equal(setup.frameWindow.getServiceSlot(1).service, null);
+});
+
+test('waits for the souvenir iframe to finish initialization before resolving load', async () => {
+  const setup = createBridge(false);
+  let loaded = false;
+  const pendingLoad = setup.bridge.load('souvenir').then(function (frame) {
+    loaded = true;
+    return frame;
+  });
+
+  await new Promise(function (resolve) { setImmediate(resolve); });
+  assert.equal(loaded, false);
+
+  setup.frameWindow.souvenirServicesReady = true;
+  setup.frameWindow.dispatchEvent({ type: 'souvenir-services-ready' });
+  assert.equal(await pendingLoad, setup.frame);
+});
+
+test('does not fall back to missing legacy service controls while the iframe is loading', async () => {
+  const setup = createBridge();
+  await setup.bridge.load('souvenir');
+  setup.frameWindow.getServiceSlot = undefined;
+  setup.frameWindow.createServiceSlot = undefined;
+
+  assert.equal(setup.bridge.setSouvenirServices(['Тиснение: Блокноты / Ежедневники']), false);
 });
 
 test('requires a selected order service and stores its details with the quote item', async () => {
@@ -268,4 +324,7 @@ test('loads the legacy bridge with a cache key matching its current content', ()
   const source = fs.readFileSync(path.join(root, 'js', 'core', 'legacy-bridge.js'));
   const expectedHash = crypto.createHash('sha256').update(source).digest('hex').slice(0, 12);
   assert.equal(script[1], expectedHash);
+
+  const bridge = fs.readFileSync(path.join(root, 'js', 'core', 'legacy-bridge.js'), 'utf8');
+  assert.match(bridge, /_legacy\/souvenir\/index\.html\?v=2/);
 });
